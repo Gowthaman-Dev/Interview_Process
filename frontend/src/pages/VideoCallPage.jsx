@@ -1,362 +1,587 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import socketService from '../services/socket';
 import toast from 'react-hot-toast';
 
-// Optional icons – you can replace with your own or use emoji
-const MicIcon = () => <span>🎤</span>;
-const MicOffIcon = () => <span>🔇</span>;
-const CameraIcon = () => <span>📷</span>;
+const MicIcon       = () => <span>🎤</span>;
+const MicOffIcon    = () => <span>🔇</span>;
+const CameraIcon    = () => <span>📷</span>;
 const CameraOffIcon = () => <span>📷❌</span>;
-const PhoneIcon = () => <span>📞</span>;
+const PhoneIcon     = () => <span>📞</span>;
 const FullscreenIcon = () => <span>⛶</span>;
-const MinimizeIcon = () => <span>🗗</span>;
+const MinimizeIcon  = () => <span>🗗</span>;
+const RefreshIcon   = () => <span>🔄</span>;
 
+/* ─── pick remote person's name from ANY backend shape ─────────────────────── */
+const getRemoteName = (interview, isHR) => {
+  if (!interview) return null;
+  const obj = isHR
+    ? (interview.candidate || interview.candidateUser ||
+       interview.applicant || interview.student || interview.user)
+    : (interview.interviewer || interview.interviewerUser ||
+       interview.hr || interview.hrUser ||
+       interview.recruiter || interview.host);
+  return obj?.name || obj?.fullName || obj?.firstName || null;
+};
+
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+  ],
+};
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   VideoCallPage
+══════════════════════════════════════════════════════════════════════════════ */
 const VideoCallPage = () => {
-  const { id } = useParams();
+  const { id }   = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [connecting, setConnecting] = useState(true);
-  const [error, setError] = useState(null);
-  const [cameraOn, setCameraOn] = useState(true);
-  const [micOn, setMicOn] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [phase, setPhase]                   = useState('init');   // init | ready | connected | error
+  const [error, setError]                   = useState(null);
+  const [cameraOn, setCameraOn]             = useState(true);
+  const [micOn, setMicOn]                   = useState(true);
+  const [isFullscreen, setIsFullscreen]     = useState(false);
+  const [remoteConnected, setRemoteConnected] = useState(false);
+  const [remoteUserName, setRemoteUserName] = useState('Waiting...');
+  const [reconnecting, setReconnecting]     = useState(false);
 
-  const containerRef = useRef(null);
-  const localVideoRef = useRef(null);
+  /* refs */
+  const containerRef   = useRef(null);
+  const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
-  const peerConnection = useRef(null);
-  const socket = useRef(null);
-  const localStream = useRef(null);
-  const endedByMe = useRef(false);
-  const isCaller = useRef(false);
+  const pcRef          = useRef(null);
+  const socketRef      = useRef(null);
+  const localStream    = useRef(null);
+  const endedByMe      = useRef(false);
+  const isHRRef        = useRef(false);
+  const hasRemoteDesc  = useRef(false);
+  const iceQueue       = useRef([]);
+  const makingOffer    = useRef(false);   // perfect negotiation flag
 
-  const configuration = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ],
-  };
-
+  /* ─── fullscreen ──────────────────────────────────────────────────────────── */
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
       containerRef.current.requestFullscreen().catch(console.error);
-      setIsFullscreen(true);
     } else {
       document.exitFullscreen();
-      setIsFullscreen(false);
     }
   };
-
   useEffect(() => {
-    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    const h = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', h);
+    return () => document.removeEventListener('fullscreenchange', h);
   }, []);
 
-  const getMedia = async () => {
+  /* ─── attach local stream to <video> safely ──────────────────────────────── */
+  const attachLocal = useCallback((stream) => {
+    const go = () => {
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    };
+    go();
+    setTimeout(go, 0);
+    requestAnimationFrame(go);
+  }, []);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream.current) {
+      localVideoRef.current.srcObject = localStream.current;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localVideoRef.current]);
+
+  /* ─── get camera + mic ────────────────────────────────────────────────────── */
+  const getMedia = useCallback(async () => {
+    // Re-use existing stream if tracks are still live
+    if (localStream.current) {
+      const tracks = localStream.current.getTracks();
+      if (tracks.every(t => t.readyState === 'live')) {
+        attachLocal(localStream.current);
+        return localStream.current;
+      }
+      tracks.forEach(t => t.stop());
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStream.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      attachLocal(stream);
       return stream;
-    } catch (err) {
-      setError('Camera/Microphone permission denied. Please allow access and refresh.');
-      throw err;
+    } catch {
+      throw new Error('Camera / microphone permission denied. Please allow access and refresh.');
     }
-  };
+  }, [attachLocal]);
 
-  const setupPeerConnection = (stream) => {
-    const pc = new RTCPeerConnection(configuration);
-    peerConnection.current = pc;
+  /* ─── flush queued ICE candidates ────────────────────────────────────────── */
+  const flushIce = useCallback(async () => {
+    while (iceQueue.current.length) {
+      const c = iceQueue.current.shift();
+      try { await pcRef.current?.addIceCandidate(new RTCIceCandidate(c)); }
+      catch (e) { console.warn('ICE flush error:', e); }
+    }
+  }, []);
 
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+  /* ─── close old peer connection ──────────────────────────────────────────── */
+  const closePc = useCallback(() => {
+    if (pcRef.current) {
+      pcRef.current.ontrack         = null;
+      pcRef.current.onicecandidate  = null;
+      pcRef.current.oniceconnectionstatechange = null;
+      pcRef.current.onnegotiationneeded = null;
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    hasRemoteDesc.current = false;
+    iceQueue.current      = [];
+    makingOffer.current   = false;
+  }, []);
 
-    pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-        setConnecting(false);
+  /* ─── create RTCPeerConnection ────────────────────────────────────────────── */
+  const createPc = useCallback((stream) => {
+    closePc();
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    pcRef.current = pc;
+
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+    pc.ontrack = ({ streams }) => {
+      if (remoteVideoRef.current && streams[0]) {
+        remoteVideoRef.current.srcObject = streams[0];
+        setRemoteConnected(true);
+        setPhase('connected');
+        setReconnecting(false);
       }
     };
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.current.emit('ice-candidate', { interviewId: id, candidate: event.candidate });
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate && socketRef.current) {
+        socketRef.current.emit('ice-candidate', { interviewId: id, candidate });
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'connected') {
-        toast.success('Connected');
-        setConnecting(false);
+      const s = pc.iceConnectionState;
+      console.log('[ICE]', s);
+      if (s === 'connected' || s === 'completed') {
+        setRemoteConnected(true);
+        setPhase('connected');
+        setReconnecting(false);
+      }
+      if (s === 'disconnected' || s === 'failed') {
+        setRemoteConnected(false);
       }
     };
 
     return pc;
-  };
+  }, [id, closePc]);
 
-  const createOffer = async (pc) => {
+  /* ─── signalling ──────────────────────────────────────────────────────────── */
+  const sendOffer = useCallback(async () => {
+    const pc = pcRef.current;
+    if (!pc || makingOffer.current) return;
     try {
+      makingOffer.current = true;
       const offer = await pc.createOffer();
+      if (pc.signalingState !== 'stable') return;   // state changed, abort
       await pc.setLocalDescription(offer);
-      socket.current.emit('offer', { interviewId: id, offer });
-    } catch (err) {
-      console.error('Create offer error:', err);
+      socketRef.current?.emit('offer', { interviewId: id, offer: pc.localDescription });
+      console.log('[Signalling] offer sent');
+    } catch (e) {
+      console.error('sendOffer error:', e);
+    } finally {
+      makingOffer.current = false;
     }
-  };
+  }, [id]);
 
-  const handleOffer = async (offer) => {
-    if (!peerConnection.current) return;
+  const handleOffer = useCallback(async (offer) => {
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    // Collision guard — if we're also making an offer (both sides HR by mistake),
+    // politely back off if we're the "impolite" peer (HR)
+    const offerCollision = makingOffer.current || pc.signalingState !== 'stable';
+    if (offerCollision && isHRRef.current) return;  // HR is impolite peer
+
     try {
-      await peerConnection.current.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.current.createAnswer();
-      await peerConnection.current.setLocalDescription(answer);
-      socket.current.emit('answer', { interviewId: id, answer });
-    } catch (err) {
-      console.error('Handle offer error:', err);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      hasRemoteDesc.current = true;
+      await flushIce();
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socketRef.current?.emit('answer', { interviewId: id, answer: pc.localDescription });
+      console.log('[Signalling] answer sent');
+    } catch (e) {
+      console.error('handleOffer error:', e);
     }
-  };
+  }, [id, flushIce]);
 
-  const handleAnswer = async (answer) => {
-    if (!peerConnection.current) return;
+  const handleAnswer = useCallback(async (answer) => {
+    const pc = pcRef.current;
+    if (!pc) return;
+    if (pc.signalingState === 'stable') return;  // already handled
     try {
-      await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
-    } catch (err) {
-      console.error('Handle answer error:', err);
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      hasRemoteDesc.current = true;
+      await flushIce();
+      console.log('[Signalling] answer applied');
+    } catch (e) {
+      console.error('handleAnswer error:', e);
     }
-  };
+  }, [flushIce]);
 
-  const handleIceCandidate = async (candidate) => {
-    if (!peerConnection.current) return;
+  const handleIce = useCallback(async (candidate) => {
+    if (!candidate) return;
+    if (!hasRemoteDesc.current || !pcRef.current) {
+      iceQueue.current.push(candidate);
+      return;
+    }
     try {
-      await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (err) {
-      console.error('Add ICE candidate error:', err);
+      await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.warn('addIceCandidate error:', e);
     }
-  };
+  }, []);
 
-  const handleEndCall = async () => {
+  /* ─── cleanup everything ─────────────────────────────────────────────────── */
+  const cleanup = useCallback(() => {
+    closePc();
+    localStream.current?.getTracks().forEach(t => t.stop());
+    localStream.current = null;
+  }, [closePc]);
+
+  /* ─── reconnect without full page refresh ────────────────────────────────── */
+  const reconnect = useCallback(async () => {
+    if (reconnecting) return;
+    setReconnecting(true);
+    setRemoteConnected(false);
+    closePc();
+
+    try {
+      const stream = await getMedia();
+      const pc = createPc(stream);
+
+      // Re-register socket events (they were removed on cleanup, but socket still live)
+      const sock = socketRef.current;
+      if (!sock) { setReconnecting(false); return; }
+
+      // Tell room we're back
+      sock.emit('join-video-room', id);
+      sock.emit('user-ready', { interviewId: id, name: user?.name });
+
+      if (isHRRef.current) {
+        await sendOffer();
+      }
+      console.log('[Reconnect] done, waiting for peer...');
+    } catch (e) {
+      console.error('reconnect error:', e);
+      setReconnecting(false);
+      toast.error('Reconnect failed. Please try again.');
+    }
+  }, [reconnecting, closePc, getMedia, createPc, id, user, sendOffer]);
+
+  /* ─── end call ───────────────────────────────────────────────────────────── */
+  const handleEndCall = useCallback(async () => {
     if (endedByMe.current) return;
     endedByMe.current = true;
     try {
       await api.post(`/interviews/${id}/end`);
       toast.success('Call ended. Duration recorded.');
       navigate(`/interview/${id}`, { replace: true });
-    } catch (err) {
+    } catch {
       toast.error('Failed to end call');
     } finally {
       cleanup();
     }
-  };
+  }, [id, navigate, cleanup]);
 
-  const cleanup = () => {
-    if (localStream.current) {
-      localStream.current.getTracks().forEach(track => track.stop());
-    }
-    if (peerConnection.current) {
-      peerConnection.current.close();
-      peerConnection.current = null;
-    }
-  };
-
+  /* ─── toggle camera / mic ────────────────────────────────────────────────── */
   const toggleCamera = () => {
-    if (localStream.current) {
-      const videoTrack = localStream.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !cameraOn;
-        setCameraOn(!cameraOn);
-      }
-    }
+    const t = localStream.current?.getVideoTracks()[0];
+    if (t) { t.enabled = !cameraOn; setCameraOn(v => !v); }
   };
-
   const toggleMic = () => {
-    if (localStream.current) {
-      const audioTrack = localStream.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !micOn;
-        setMicOn(!micOn);
-      }
-    }
+    const t = localStream.current?.getAudioTracks()[0];
+    if (t) { t.enabled = !micOn; setMicOn(v => !v); }
   };
 
+  /* ─── MAIN INIT ──────────────────────────────────────────────────────────── */
   useEffect(() => {
+    let mounted = true;
+
     const init = async () => {
       try {
+        /* 1. Fetch interview */
         const { data } = await api.get(`/interviews/${id}`);
-        if (data.interview.status !== 'InProgress') {
+        if (!mounted) return;
+        const interview = data.interview || data;
+
+        if (interview.status !== 'InProgress') {
           toast.error('This interview is no longer active.');
           navigate(`/interview/${id}`, { replace: true });
           return;
         }
 
+        /* 2. Resolve names */
+        const isHR = user?.role === 'HR';
+        isHRRef.current = isHR;
+        const name = getRemoteName(interview, isHR);
+        if (mounted) setRemoteUserName(name || (isHR ? 'Candidate' : 'Interviewer'));
+
+        /* 3. Auth */
         const token = localStorage.getItem('accessToken');
-        if (!token) {
-          navigate('/login');
-          return;
-        }
+        if (!token) { navigate('/login'); return; }
 
-        let connectedSocket = socketService.getSocket();
-        if (!connectedSocket?.connected) {
-          connectedSocket = await socketService.connect(token);
-        }
-        if (!connectedSocket) throw new Error('Socket connection failed');
-        socket.current = connectedSocket;
+        /* 4. Socket */
+        let sock = socketService.getSocket();
+        if (!sock?.connected) sock = await socketService.connect(token);
+        if (!sock || !mounted) return;
+        socketRef.current = sock;
 
-        socket.current.emit('join-video-room', id);
+        /* 5. Local media — user sees themselves straight away */
+        const stream = await getMedia();
+        if (!mounted) return;
 
-        socket.current.on('call-ended', () => {
+        /* 6. Peer connection */
+        createPc(stream);
+
+        /* 7. Register ALL socket listeners BEFORE joining room */
+        sock.off('user-joined');
+        sock.off('user-ready');
+        sock.off('offer');
+        sock.off('answer');
+        sock.off('ice-candidate');
+        sock.off('call-ended');
+
+        // Someone joined or signalled they are ready → HR sends offer
+        const onPeerReady = ({ name: peerName } = {}) => {
+          console.log('[Socket] peer ready / joined', peerName);
+          if (peerName && mounted) setRemoteUserName(peerName);
+          if (isHRRef.current) {
+            console.log('[Signalling] HR sending offer');
+            sendOffer();
+          }
+        };
+        sock.on('user-joined', onPeerReady);
+        sock.on('user-ready',  onPeerReady);   // custom event from candidate
+
+        sock.on('offer', async ({ offer }) => {
+          console.log('[Socket] offer received');
+          if (!isHRRef.current) await handleOffer(offer);
+        });
+
+        sock.on('answer', async ({ answer }) => {
+          console.log('[Socket] answer received');
+          if (isHRRef.current) await handleAnswer(answer);
+        });
+
+        sock.on('ice-candidate', ({ candidate }) => handleIce(candidate));
+
+        sock.on('call-ended', () => {
           if (endedByMe.current) return;
           endedByMe.current = true;
-          toast('The interview has ended by the other participant.', { icon: 'ℹ️' });
+          toast('The other participant ended the call.', { icon: 'ℹ️' });
           cleanup();
           navigate(`/interview/${id}`, { replace: true });
         });
 
-        const stream = await getMedia();
-        const pc = setupPeerConnection(stream);
-        peerConnection.current = pc;
+        /* 8. Join room */
+        sock.emit('join-video-room', id);
 
-        const isHR = user?.role === 'HR';
-        isCaller.current = isHR;
-
-        if (isHR) {
-          await createOffer(pc);
+        /* 9. Candidate announces themselves so HR knows to send offer */
+        if (!isHR) {
+          sock.emit('user-ready', { interviewId: id, name: user?.name });
         }
 
-        socket.current.on('offer', async ({ offer }) => {
-          if (!isHR) await handleOffer(offer);
-        });
-        socket.current.on('answer', ({ answer }) => {
-          if (isHR) handleAnswer(answer);
-        });
-        socket.current.on('ice-candidate', ({ candidate }) => {
-          handleIceCandidate(candidate);
-        });
-        socket.current.on('user-joined', () => {
-          console.log('Other user joined');
-        });
+        if (mounted) setPhase('ready');
 
-        setConnecting(false);
       } catch (err) {
-        console.error(err);
-        setError(err.message || 'Connection failed');
-        setConnecting(false);
+        console.error('[VideoCall] init error:', err);
+        if (mounted) {
+          setError(err.message || 'Connection failed');
+          setPhase('error');
+        }
       }
     };
 
     init();
 
     return () => {
-      if (socket.current) {
-        socket.current.off('call-ended');
-        socket.current.off('offer');
-        socket.current.off('answer');
-        socket.current.off('ice-candidate');
-        socket.current.off('user-joined');
+      mounted = false;
+      if (socketRef.current) {
+        socketRef.current.off('user-joined');
+        socketRef.current.off('user-ready');
+        socketRef.current.off('offer');
+        socketRef.current.off('answer');
+        socketRef.current.off('ice-candidate');
+        socketRef.current.off('call-ended');
       }
       cleanup();
     };
-  }, [id, user, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  if (connecting) {
+  /* ══════════════════════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════════════════════ */
+
+  /* Loading */
+  if (phase === 'init') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-white text-lg font-medium">Connecting to interview...</p>
-          <p className="text-slate-300 text-sm mt-2">Please wait while we establish the connection</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center max-w-sm w-full mx-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent mx-auto mb-4" />
+          <p className="text-white text-lg font-medium">Setting up your call...</p>
+          <p className="text-slate-400 text-sm mt-2">Getting camera and connecting</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  /* Error */
+  if (phase === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center">
-          <p className="text-red-400 mb-4">{error}</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center max-w-sm w-full mx-4">
+          <p className="text-red-400 font-medium mb-2">Connection error</p>
+          <p className="text-slate-300 text-sm mb-6">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-5 py-2 bg-cyan-600 text-white rounded-xl hover:bg-cyan-700 transition"
+            className="px-6 py-2 bg-cyan-600 text-white rounded-xl hover:bg-cyan-700 transition"
           >
-            Retry
+            Reload page
           </button>
         </div>
       </div>
     );
   }
 
+  /* Call UI (phase === 'ready' | 'connected') */
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col">
-      {/* Video Grid */}
+
+      {/* ── Video grid ───────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col md:flex-row p-4 md:p-6 gap-4 md:gap-6 items-center justify-center">
-        {/* Local Video */}
-        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm shadow-xl">
+
+        {/* Local video */}
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-slate-800 shadow-xl">
           <video
             ref={localVideoRef}
             autoPlay
             muted
             playsInline
-            className="w-full h-full object-cover aspect-video"
+            className="w-full aspect-video object-cover"
           />
+          {/* dark overlay when camera off */}
+          {!cameraOn && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
+              <p className="text-slate-400 text-sm">Camera off</p>
+            </div>
+          )}
           <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs">
-            <span className="flex items-center gap-1">
-              <div className={`w-2 h-2 rounded-full ${micOn ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              {user?.name || 'You'} {!cameraOn && '(Camera off)'}
+            <span className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full inline-block ${micOn ? 'bg-green-500' : 'bg-red-500'}`} />
+              {user?.name || 'You'}
             </span>
           </div>
         </div>
 
-        {/* Remote Video */}
-        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm shadow-xl">
+        {/* Remote video */}
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-slate-800 shadow-xl">
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className="w-full h-full object-cover aspect-video"
+            className="w-full aspect-video object-cover"
           />
-          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs">
-            <span className="flex items-center gap-1">👤 Other Participant</span>
-          </div>
-          {!remoteVideoRef.current?.srcObject && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent"></div>
+
+          {/* Waiting overlay — shows until remoteConnected */}
+          {!remoteConnected && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 gap-3">
+              {reconnecting
+                ? <>
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
+                    <p className="text-slate-300 text-sm">Reconnecting...</p>
+                  </>
+                : <>
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
+                    <p className="text-slate-300 text-sm">Waiting for {remoteUserName}...</p>
+                    {/* ✅ Reconnect button — no page refresh needed */}
+                    <button
+                      onClick={reconnect}
+                      className="mt-2 flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded-xl transition"
+                    >
+                      <RefreshIcon /> Reconnect
+                    </button>
+                  </>
+              }
             </div>
           )}
+
+          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full inline-block ${remoteConnected ? 'bg-green-500' : 'bg-yellow-400 animate-pulse'}`} />
+              {remoteUserName}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Controls Bar */}
-      <div className="bg-white/10 backdrop-blur-md border-t border-white/20 p-4 flex justify-center gap-4 md:gap-6">
+      {/* ── Controls bar ─────────────────────────────────────────────────────── */}
+      <div className="bg-white/10 backdrop-blur-md border-t border-white/20 p-4 flex justify-center gap-3 md:gap-5">
+
+        {/* Mic */}
         <button
           onClick={toggleMic}
-          className={`p-3 md:p-4 rounded-full transition-all duration-200 ${
-            micOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'
-          } text-white shadow-lg`}
+          title={micOn ? 'Mute' : 'Unmute'}
+          className={`p-3 md:p-4 rounded-full transition-all duration-200 shadow-lg text-white
+            ${micOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'}`}
         >
           {micOn ? <MicIcon /> : <MicOffIcon />}
         </button>
+
+        {/* Camera */}
         <button
           onClick={toggleCamera}
-          className={`p-3 md:p-4 rounded-full transition-all duration-200 ${
-            cameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'
-          } text-white shadow-lg`}
+          title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+          className={`p-3 md:p-4 rounded-full transition-all duration-200 shadow-lg text-white
+            ${cameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'}`}
         >
           {cameraOn ? <CameraIcon /> : <CameraOffIcon />}
         </button>
+
+        {/* Reconnect — always visible, useful when one side drops */}
+        <button
+          onClick={reconnect}
+          title="Reconnect"
+          disabled={reconnecting}
+          className="p-3 md:p-4 rounded-full bg-slate-700 hover:bg-slate-600 text-white
+            transition-all duration-200 shadow-lg disabled:opacity-50"
+        >
+          <span className={reconnecting ? 'animate-spin inline-block' : ''}><RefreshIcon /></span>
+        </button>
+
+        {/* End call */}
         <button
           onClick={handleEndCall}
-          className="p-3 md:p-4 rounded-full bg-red-600 text-white hover:bg-red-700 transition-all duration-200 shadow-lg"
+          title="End call"
+          className="p-3 md:p-4 rounded-full bg-red-600 text-white hover:bg-red-700
+            transition-all duration-200 shadow-lg"
         >
           <PhoneIcon />
         </button>
+
+        {/* Fullscreen */}
         <button
           onClick={toggleFullscreen}
-          className="p-3 md:p-4 rounded-full bg-slate-700 text-white hover:bg-slate-600 transition-all duration-200 shadow-lg"
+          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          className="p-3 md:p-4 rounded-full bg-slate-700 text-white hover:bg-slate-600
+            transition-all duration-200 shadow-lg"
         >
           {isFullscreen ? <MinimizeIcon /> : <FullscreenIcon />}
         </button>
