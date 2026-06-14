@@ -19,24 +19,41 @@ import noteRoutes from './routes/noteRoutes.js';
 dotenv.config();
 validateEnv();
 connectDB();
-startReminderJob()
+startReminderJob();
 configureCloudinary();
 
 const app = express();
 
-// CORS configuration (allow frontend and WebSocket)
+// ✅ CORS configuration – allow localhost and your Vercel frontend
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://interview-process-puce.vercel.app',
+  // Add any other production frontend URLs here
+];
+
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173','http://localhost:5174'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or same-origin)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('❌ Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
+
 app.use(cors(corsOptions));
 
-// Helmet with relaxed policy for local development
+// Helmet with relaxed policy for cross-origin
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// Simple XSS prevention (replaces deprecated xss-clean)
+// Simple XSS prevention
 const simpleXssClean = (req, res, next) => {
   const clean = (obj) => {
     if (!obj) return;
@@ -55,7 +72,7 @@ const simpleXssClean = (req, res, next) => {
 };
 app.use(simpleXssClean);
 
-// Safe MongoDB sanitization (no express-mongo-sanitize conflict)
+// Safe MongoDB sanitization (no package that overwrites query)
 const safeMongoSanitize = (req, res, next) => {
   const sanitize = (obj) => {
     if (!obj) return;
@@ -92,7 +109,7 @@ app.get('/', (req, res) => {
   res.json({ message: 'Interview Meet API is running' });
 });
 
-// Global error handler (MUST be last middleware)
+// Global error handler (must be last)
 app.use(errorMiddleware);
 
 // Start the server
@@ -101,7 +118,7 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// Initialize Socket.IO and attach to app
+// Socket.IO initialization (with its own CORS)
 const io = initSocket(server);
 app.set('io', io);
 

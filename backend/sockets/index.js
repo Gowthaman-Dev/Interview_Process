@@ -7,7 +7,12 @@ let io;
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+      origin: [
+        'http://localhost:5173',                 // Local Vite dev
+        'http://localhost:5174',                 // Alternative dev port
+        'https://interview-process-puce.vercel.app', // Your deployed frontend
+        // Add any other production frontends here
+      ],
       credentials: true,
     },
   });
