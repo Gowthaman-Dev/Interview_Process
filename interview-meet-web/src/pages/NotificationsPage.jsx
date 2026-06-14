@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import NavBar from '../components/NavBar';
 import toast from 'react-hot-toast';
+import { Bell, Calendar, Clock, CheckCircle, Circle, Loader2, MailOpen } from 'lucide-react';
 
 const NotificationsPage = () => {
   const { user, notificationCount, setNotificationCount } = useAuth();
@@ -22,16 +23,16 @@ const NotificationsPage = () => {
         setNotifications(newNotifs);
       }
       setHasMore(data.pagination.page < data.pagination.pages);
-      // Update global unread count
       setNotificationCount(data.unreadCount);
     } catch (err) {
       toast.error('Failed to load notifications');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchNotifications(1, false);
-    setLoading(false);
   }, []);
 
   const loadMore = async () => {
@@ -72,20 +73,30 @@ const NotificationsPage = () => {
 
   const getIcon = (type) => {
     switch (type) {
-      case 'reminder': return '⏰';
-      case 'interview_update': return '📅';
-      default: return '🔔';
+      case 'reminder': return <Clock size={20} className="text-[#06B6D4]" />;
+      case 'interview_update': return <Calendar size={20} className="text-[#0F172A]" />;
+      default: return <Bell size={20} className="text-gray-500" />;
     }
   };
 
+  // Loading skeleton
   if (loading) {
     return (
       <div>
         <NavBar />
-        <div className="max-w-2xl mx-auto p-4">
-          <div className="animate-pulse space-y-3">
+        <div className="max-w-2xl mx-auto p-6">
+          <div className="animate-pulse space-y-4">
             {[1, 2, 3].map(i => (
-              <div key={i} className="bg-gray-100 h-20 rounded"></div>
+              <div key={i} className="bg-white/50 backdrop-blur-sm border border-gray-100 rounded-2xl p-4">
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                    <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -96,45 +107,58 @@ const NotificationsPage = () => {
   return (
     <div>
       <NavBar />
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">Notifications</h1>
+      <div className="max-w-2xl mx-auto p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Notifications</h1>
           {notifications.some(n => !n.isRead) && (
             <button
               onClick={markAllAsRead}
-              className="text-sm text-indigo-600 hover:text-indigo-800"
+              className="flex items-center gap-1.5 text-sm text-[#06B6D4] hover:text-[#0891B2] transition-colors"
             >
-              Mark all as read
+              <MailOpen size={14} /> Mark all as read
             </button>
           )}
         </div>
 
         {notifications.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No notifications yet.
+          <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-100">
+            <Bell size={48} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500">No notifications yet.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {notifications.map(notif => (
               <div
                 key={notif._id}
-                className={`bg-white border rounded-lg p-4 shadow-sm transition ${
-                  !notif.isRead ? 'border-l-4 border-l-indigo-500 bg-indigo-50' : ''
+                className={`bg-white/80 backdrop-blur-sm border rounded-2xl p-4 shadow-sm transition-all duration-200 hover:shadow-md ${
+                  !notif.isRead ? 'border-l-4 border-l-[#06B6D4] bg-[#F0FDF9]' : 'border-gray-100'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">{getIcon(notif.type)}</div>
+                  <div className="flex-shrink-0 mt-0.5">
+                    {getIcon(notif.type)}
+                  </div>
                   <div className="flex-1">
-                    <h3 className="font-semibold">{notif.title}</h3>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-[#0F172A]">{notif.title}</h3>
+                      {!notif.isRead && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-[#06B6D4]/10 text-[#06B6D4] px-2 py-0.5 rounded-full">
+                          <Circle size={6} fill="#06B6D4" /> New
+                        </span>
+                      )}
+                    </div>
                     <p className="text-gray-600 text-sm">{notif.message}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {new Date(notif.createdAt).toLocaleString()}
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(notif.createdAt).toLocaleString(undefined, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short'
+                      })}
                     </p>
                   </div>
                   {!notif.isRead && (
                     <button
                       onClick={() => markAsRead(notif._id)}
-                      className="text-xs text-indigo-600 hover:text-indigo-800"
+                      className="flex-shrink-0 text-xs text-[#06B6D4] hover:text-[#0891B2] underline-offset-2 hover:underline"
                     >
                       Mark read
                     </button>
@@ -143,12 +167,13 @@ const NotificationsPage = () => {
               </div>
             ))}
             {hasMore && (
-              <div className="text-center py-2">
+              <div className="text-center pt-2">
                 <button
                   onClick={loadMore}
                   disabled={loadingMore}
-                  className="text-indigo-600 text-sm"
+                  className="inline-flex items-center gap-1 text-sm text-[#06B6D4] hover:text-[#0891B2] transition-colors"
                 >
+                  {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
                   {loadingMore ? 'Loading...' : 'Load more'}
                 </button>
               </div>

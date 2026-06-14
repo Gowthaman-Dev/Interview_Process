@@ -5,6 +5,15 @@ import api from '../services/api';
 import socketService from '../services/socket';
 import toast from 'react-hot-toast';
 
+// Optional icons – you can replace with your own or use emoji
+const MicIcon = () => <span>🎤</span>;
+const MicOffIcon = () => <span>🔇</span>;
+const CameraIcon = () => <span>📷</span>;
+const CameraOffIcon = () => <span>📷❌</span>;
+const PhoneIcon = () => <span>📞</span>;
+const FullscreenIcon = () => <span>⛶</span>;
+const MinimizeIcon = () => <span>🗗</span>;
+
 const VideoCallPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -14,7 +23,9 @@ const VideoCallPage = () => {
   const [error, setError] = useState(null);
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const containerRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerConnection = useRef(null);
@@ -29,6 +40,23 @@ const VideoCallPage = () => {
       { urls: 'stun:stun1.l.google.com:19302' },
     ],
   };
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(console.error);
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const getMedia = async () => {
     try {
@@ -49,7 +77,10 @@ const VideoCallPage = () => {
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
+      if (remoteVideoRef.current && event.streams[0]) {
+        remoteVideoRef.current.srcObject = event.streams[0];
+        setConnecting(false);
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -58,10 +89,10 @@ const VideoCallPage = () => {
       }
     };
 
-    pc.onconnectionstatechange = () => {
-      console.log('Connection state:', pc.connectionState);
-      if (pc.connectionState === 'failed') {
-        toast.error('Connection lost. Please refresh.');
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'connected') {
+        toast.success('Connected');
+        setConnecting(false);
       }
     };
 
@@ -117,8 +148,6 @@ const VideoCallPage = () => {
       navigate(`/interview/${id}`, { replace: true });
     } catch (err) {
       toast.error('Failed to end call');
-      console.error(err);
-      endedByMe.current = false;
     } finally {
       cleanup();
     }
@@ -131,9 +160,6 @@ const VideoCallPage = () => {
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
-    }
-    if (socket.current) {
-      socket.current.disconnect();
     }
   };
 
@@ -160,7 +186,6 @@ const VideoCallPage = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        // Check if interview is still in progress before starting
         const { data } = await api.get(`/interviews/${id}`);
         if (data.interview.status !== 'InProgress') {
           toast.error('This interview is no longer active.');
@@ -174,16 +199,12 @@ const VideoCallPage = () => {
           return;
         }
 
-        let connectedSocket;
-        try {
+        let connectedSocket = socketService.getSocket();
+        if (!connectedSocket?.connected) {
           connectedSocket = await socketService.connect(token);
-          if (!connectedSocket) throw new Error('Socket connection failed');
-          socket.current = connectedSocket;
-        } catch (err) {
-          toast.error('Real-time connection failed. Please refresh.');
-          navigate('/dashboard');
-          return;
         }
+        if (!connectedSocket) throw new Error('Socket connection failed');
+        socket.current = connectedSocket;
 
         socket.current.emit('join-video-room', id);
 
@@ -243,72 +264,101 @@ const VideoCallPage = () => {
 
   if (connecting) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
-        <p>Connecting to video call...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-white text-lg font-medium">Connecting to interview...</p>
+          <p className="text-slate-300 text-sm mt-2">Please wait while we establish the connection</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white">
-        <p className="text-red-400 mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-indigo-600 rounded hover:bg-indigo-700"
-        >
-          Retry
-        </button>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center">
+          <p className="text-red-400 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2 bg-cyan-600 text-white rounded-xl hover:bg-cyan-700 transition"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      <div className="flex-1 flex flex-col md:flex-row p-4 gap-4">
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+    <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col">
+      {/* Video Grid */}
+      <div className="flex-1 flex flex-col md:flex-row p-4 md:p-6 gap-4 md:gap-6 items-center justify-center">
+        {/* Local Video */}
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm shadow-xl">
           <video
             ref={localVideoRef}
             autoPlay
             muted
             playsInline
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover aspect-video"
           />
-          <div className="absolute bottom-2 left-2 text-white text-xs bg-black/50 px-2 py-1 rounded">
-            You {!cameraOn && '(Camera off)'}
+          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs">
+            <span className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full ${micOn ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              {user?.name || 'You'} {!cameraOn && '(Camera off)'}
+            </span>
           </div>
         </div>
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+
+        {/* Remote Video */}
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm shadow-xl">
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover aspect-video"
           />
-          <div className="absolute bottom-2 left-2 text-white text-xs bg-black/50 px-2 py-1 rounded">
-            Other Participant
+          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs">
+            <span className="flex items-center gap-1">👤 Other Participant</span>
           </div>
+          {!remoteVideoRef.current?.srcObject && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent"></div>
+            </div>
+          )}
         </div>
       </div>
-      <div className="bg-gray-800 p-4 flex justify-center gap-4">
+
+      {/* Controls Bar */}
+      <div className="bg-white/10 backdrop-blur-md border-t border-white/20 p-4 flex justify-center gap-4 md:gap-6">
         <button
           onClick={toggleMic}
-          className={`p-3 rounded-full ${micOn ? 'bg-gray-600' : 'bg-red-600'} text-white hover:opacity-80`}
+          className={`p-3 md:p-4 rounded-full transition-all duration-200 ${
+            micOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'
+          } text-white shadow-lg`}
         >
-          {micOn ? '🎤 Mic On' : '🔇 Mic Off'}
+          {micOn ? <MicIcon /> : <MicOffIcon />}
         </button>
         <button
           onClick={toggleCamera}
-          className={`p-3 rounded-full ${cameraOn ? 'bg-gray-600' : 'bg-red-600'} text-white hover:opacity-80`}
+          className={`p-3 md:p-4 rounded-full transition-all duration-200 ${
+            cameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'
+          } text-white shadow-lg`}
         >
-          {cameraOn ? '📷 Camera On' : '📷 Camera Off'}
+          {cameraOn ? <CameraIcon /> : <CameraOffIcon />}
         </button>
         <button
           onClick={handleEndCall}
-          className="p-3 rounded-full bg-red-600 text-white hover:bg-red-700"
+          className="p-3 md:p-4 rounded-full bg-red-600 text-white hover:bg-red-700 transition-all duration-200 shadow-lg"
         >
-          📞 End Call
+          <PhoneIcon />
+        </button>
+        <button
+          onClick={toggleFullscreen}
+          className="p-3 md:p-4 rounded-full bg-slate-700 text-white hover:bg-slate-600 transition-all duration-200 shadow-lg"
+        >
+          {isFullscreen ? <MinimizeIcon /> : <FullscreenIcon />}
         </button>
       </div>
     </div>

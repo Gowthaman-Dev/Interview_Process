@@ -21,15 +21,12 @@ export default (io, socket) => {
       interview.waitingRoomStatus = 'Waiting';
       await interview.save();
 
-      socket.join(`interview_${interviewId}`);
-
+      // Emit to HR immediately
       io.to(interview.hrId.toString()).emit('candidate-waiting', {
         interviewId: interview._id,
         candidateName: socket.user.name,
         position: interview.position,
       });
-
-      console.log(`📣 Emitted candidate-waiting to HR ${interview.hrId.toString()} for interview ${interviewId}`);
 
       socket.emit('waiting-status', { status: 'Waiting' });
     } catch (err) {
@@ -52,10 +49,9 @@ export default (io, socket) => {
         return;
       }
 
-      // ✅ Set meetingStartedAt when HR accepts
       interview.waitingRoomStatus = 'Accepted';
       interview.status = 'InProgress';
-      interview.meetingStartedAt = new Date(); // ✅ Must be present
+      interview.meetingStartedAt = new Date();
       await interview.save();
 
       io.to(interview.candidateId.toString()).emit('hr-accepted', {
@@ -119,6 +115,7 @@ export default (io, socket) => {
     socket.to(`video_${interviewId}`).emit('ice-candidate', { candidate });
   });
 
+  // ========== DISCONNECT HANDLING ==========
   socket.on('disconnect', async () => {
     try {
       const activeInterview = await Interview.findOne({
@@ -129,6 +126,9 @@ export default (io, socket) => {
       });
       if (activeInterview) {
         console.log(`User ${socket.user.email} disconnected from active interview ${activeInterview._id}`);
+        // Optionally notify the other party
+        io.to(activeInterview.candidateId.toString()).emit('user-disconnected', { userId: socket.user._id });
+        io.to(activeInterview.hrId.toString()).emit('user-disconnected', { userId: socket.user._id });
       }
     } catch (err) {
       console.error('Error in disconnect handler:', err);
