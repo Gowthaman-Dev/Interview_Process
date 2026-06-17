@@ -4,7 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import socketService from '../services/socket';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Send, CheckCheck, Check, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Send, CheckCheck, Check } from 'lucide-react';
+
+// Helper: safely get an id string whether it's an ObjectId, a populated
+// object ({_id, name, ...}), or a plain string. This is the root fix for
+// the "messages show on the wrong side" bug — strict === comparisons
+// between an ObjectId and a string (or undefined) silently fail.
+const getId = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val._id) return String(val._id);
+  return String(val);
+};
 
 const ChatPage = () => {
   const { interviewId } = useParams();
@@ -84,15 +95,17 @@ const ChatPage = () => {
     };
 
     setMessages(prev => [...prev, optimisticMessage]);
+    const msgToSend = newMessage;
     setNewMessage('');
     setSending(true);
 
     try {
       socket.current.emit('send-message', {
         roomId: interviewId,
-        message: newMessage,
+        message: msgToSend,
         messageType: 'text',
       });
+      console.log('📤 Sent:', msgToSend);
     } catch (err) {
       toast.error('Failed to send message');
       setMessages(prev => prev.filter(m => m._id !== tempId));
@@ -115,33 +128,60 @@ const ChatPage = () => {
 
         socket.current.emit('join-chat-room', interviewId);
         setRoomJoined(true);
+        console.log(`📌 Joined room: ${interviewId}`);
+
         socket.current.emit('mark-as-read', { roomId: interviewId });
 
+        // ✅ Listen for new messages
         socket.current.on('receive-message', (newMsg) => {
+          console.log('📩 Received:', newMsg, 'senderId raw:', newMsg.senderId);
+
+          // Defensive fix: if the server sends senderId as a bare string
+          // (not populated with name/email), normalize it to an object so
+          // the rest of the UI (avatar initial, name label) doesn't break.
+          if (newMsg.senderId && typeof newMsg.senderId === 'string') {
+            const isFromMe = newMsg.senderId === user._id;
+            newMsg = {
+              ...newMsg,
+              senderId: isFromMe
+                ? { _id: user._id, name: user.name, email: user.email }
+                : { _id: newMsg.senderId, name: newMsg.senderName || 'Unknown' },
+            };
+          }
+
           setMessages(prev => {
+            // 1. If this exact message already exists (by real _id), ignore
             if (prev.some(m => m._id === newMsg._id)) return prev;
+
+            // 2. Find an optimistic message from the same sender with the same content
             const optimisticIndex = prev.findIndex(m =>
               m.optimistic === true &&
-              m.message === newMsg.message &&
-              m.senderId?._id === newMsg.senderId?._id &&
-              Math.abs(new Date(m.createdAt) - new Date(newMsg.createdAt)) < 3000
+              getId(m.senderId) === getId(newMsg.senderId) &&
+              m.message === newMsg.message
             );
+
+            // 3. If found, replace it
             if (optimisticIndex !== -1) {
               const updated = [...prev];
               updated[optimisticIndex] = newMsg;
+              console.log('🔄 Replaced optimistic message with real one');
               return updated;
             }
+
+            // 4. Otherwise, append as new message
             return [...prev, newMsg];
           });
+
           if (document.hasFocus()) {
             socket.current.emit('mark-as-read', { roomId: interviewId });
           }
         });
 
         socket.current.on('messages-read', ({ userId: readerId }) => {
+          console.log('👀 Read by:', readerId);
           setMessages(prev =>
             prev.map(msg =>
-              msg.senderId?._id !== readerId && !msg.isRead
+              getId(msg.senderId) !== getId(readerId) && !msg.isRead
                 ? { ...msg, isRead: true, readAt: new Date() }
                 : msg
             )
@@ -149,6 +189,7 @@ const ChatPage = () => {
         });
       } catch (err) {
         toast.error('Chat connection failed');
+        console.error(err);
       }
     };
 
@@ -162,6 +203,7 @@ const ChatPage = () => {
     };
   }, [interviewId, navigate]);
 
+  // Load initial messages
   useEffect(() => {
     const loadMessages = async () => {
       setLoading(true);
@@ -171,6 +213,7 @@ const ChatPage = () => {
     loadMessages();
   }, [interviewId]);
 
+  // Mark as read when tab becomes visible
   useEffect(() => {
     markMessagesAsRead();
     const handleVisibilityChange = () => {
@@ -183,7 +226,10 @@ const ChatPage = () => {
   }, [roomJoined, interviewId]);
 
   const MessageBubble = ({ msg }) => {
-    const isMine = msg.senderId?._id === user?._id;
+    // ✅ FIX: string-safe comparison instead of strict === on possibly
+    // mismatched types (ObjectId vs string vs undefined)
+    const isMine = getId(msg.senderId) === getId(user?._id);
+
     return (
       <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-3`}>
         {!isMine && (
@@ -237,9 +283,6 @@ const ChatPage = () => {
             <h1 className="font-semibold text-gray-800">Interview Chat</h1>
             <p className="text-xs text-gray-500">ID: {interviewId?.slice(-8)}</p>
           </div>
-          <button className="p-2 rounded-full hover:bg-gray-100 transition">
-            <MoreVertical size={18} className="text-gray-600" />
-          </button>
         </div>
       </div>
 
