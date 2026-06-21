@@ -8,7 +8,7 @@ export default (io, socket) => {
   });
 
   // Send a message
-  socket.on('send-message', async ({ roomId, message, messageType = 'text' }) => {
+  socket.on('send-message', async ({ roomId, message, messageType = 'text', clientTempId }) => {
     try {
       const newMessage = await Message.create({
         senderId: socket.user._id,
@@ -21,10 +21,12 @@ export default (io, socket) => {
       // Populate sender details for immediate display
       const populatedMessage = await Message.findById(newMessage._id).populate('senderId', 'name email');
 
-      // Emit to all participants in the chat room
-      io.to(`chat_${roomId}`).emit('receive-message', populatedMessage);
+      // ✅ Include clientTempId in the broadcast payload
+      io.to(`chat_${roomId}`).emit('receive-message', {
+        ...populatedMessage.toObject(),
+        clientTempId, // echo back the temporary ID for optimistic replacement
+      });
 
-      // Also emit a notification for unread count (optional)
       socket.to(`chat_${roomId}`).emit('new-message-notification', { roomId });
     } catch (err) {
       console.error('Send message error:', err);
@@ -39,7 +41,6 @@ export default (io, socket) => {
         { roomId, isRead: false, senderId: { $ne: socket.user._id } },
         { $set: { isRead: true, readAt: new Date() } }
       );
-      // Notify others that messages have been read (optional)
       socket.to(`chat_${roomId}`).emit('messages-read', { userId: socket.user._id, roomId });
     } catch (err) {
       console.error('Mark as read error:', err);

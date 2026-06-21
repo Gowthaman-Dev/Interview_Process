@@ -6,10 +6,6 @@ import socketService from '../services/socket';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Send, CheckCheck, Check } from 'lucide-react';
 
-// Helper: safely get an id string whether it's an ObjectId, a populated
-// object ({_id, name, ...}), or a plain string. This is the root fix for
-// the "messages show on the wrong side" bug — strict === comparisons
-// between an ObjectId and a string (or undefined) silently fail.
 const getId = (val) => {
   if (!val) return '';
   if (typeof val === 'string') return val;
@@ -31,8 +27,16 @@ const ChatPage = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
-  const socket = useRef(null);
+  const socketRef = useRef(null);
   const [roomJoined, setRoomJoined] = useState(false);
+
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // Track processed message IDs
+  const seenIds = useRef(new Set());
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,11 +49,12 @@ const ChatPage = () => {
   const fetchMessages = async (pageNum, append = false) => {
     try {
       const { data } = await api.get(`/chat/${interviewId}/messages?page=${pageNum}&limit=30`);
-      const newMessages = data.messages;
+      const incoming = data.messages.filter((m) => !seenIds.current.has(m._id));
+      incoming.forEach((m) => seenIds.current.add(m._id));
       if (append) {
-        setMessages(prev => [...newMessages, ...prev]);
+        setMessages((prev) => [...incoming, ...prev]);
       } else {
-        setMessages(newMessages);
+        setMessages(incoming);
       }
       setHasMore(data.pagination.page < data.pagination.pages);
     } catch (err) {
@@ -74,14 +79,18 @@ const ChatPage = () => {
   };
 
   const markMessagesAsRead = () => {
-    if (socket.current && roomJoined) {
-      socket.current.emit('mark-as-read', { roomId: interviewId });
+    if (socketRef.current && roomJoined) {
+      socketRef.current.emit('mark-as-read', { roomId: interviewId });
     }
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+    if (!socketRef.current) {
+      toast.error('Not connected to chat');
+      return;
+    }
 
     const tempId = `temp_${Date.now()}_${Math.random()}`;
     const optimisticMessage = {
@@ -94,27 +103,90 @@ const ChatPage = () => {
       optimistic: true,
     };
 
-    setMessages(prev => [...prev, optimisticMessage]);
+    setMessages((prev) => [...prev, optimisticMessage]);
     const msgToSend = newMessage;
     setNewMessage('');
     setSending(true);
 
     try {
-      socket.current.emit('send-message', {
+      socketRef.current.emit('send-message', {
         roomId: interviewId,
         message: msgToSend,
         messageType: 'text',
+        clientTempId: tempId,
       });
-      console.log('📤 Sent:', msgToSend);
     } catch (err) {
       toast.error('Failed to send message');
-      setMessages(prev => prev.filter(m => m._id !== tempId));
+      setMessages((prev) => prev.filter((m) => m._id !== tempId));
     } finally {
       setSending(false);
     }
   };
 
   useEffect(() => {
+    let active = true;
+    let socket = null;
+
+    const handleReceiveMessage = (rawMsg) => {
+      let newMsg = rawMsg;
+
+      // Normalize senderId if it's a bare string
+      if (newMsg.senderId && typeof newMsg.senderId === 'string') {
+        const isFromMe = newMsg.senderId === userRef.current._id;
+        newMsg = {
+          ...newMsg,
+          senderId: isFromMe
+            ? { _id: userRef.current._id, name: userRef.current.name, email: userRef.current.email }
+            : { _id: newMsg.senderId, name: newMsg.senderName || 'Unknown' },
+        };
+      }
+
+      // Check if already processed (by ID)
+      if (seenIds.current.has(newMsg._id)) {
+        console.log('⏭️ Duplicate blocked by ID:', newMsg._id);
+        return;
+      }
+      seenIds.current.add(newMsg._id);
+
+      setMessages((prev) => {
+        let optIndex = -1;
+        // Exact match via clientTempId
+        if (newMsg.clientTempId) {
+          optIndex = prev.findIndex((m) => m._id === newMsg.clientTempId);
+        }
+        // Fallback: same sender + same content
+        if (optIndex === -1) {
+          optIndex = prev.findIndex(
+            (m) =>
+              m.optimistic === true &&
+              getId(m.senderId) === getId(newMsg.senderId) &&
+              m.message === newMsg.message
+          );
+        }
+        if (optIndex !== -1) {
+          const updated = [...prev];
+          updated[optIndex] = newMsg;
+          console.log('🔄 Replaced optimistic with real');
+          return updated;
+        }
+        return [...prev, newMsg];
+      });
+
+      if (document.hasFocus()) {
+        socketRef.current?.emit('mark-as-read', { roomId: interviewId });
+      }
+    };
+
+    const handleMessagesRead = ({ userId: readerId }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          getId(msg.senderId) !== getId(readerId) && !msg.isRead
+            ? { ...msg, isRead: true, readAt: new Date() }
+            : msg
+        )
+      );
+    };
+
     const initChat = async () => {
       const token = localStorage.getItem('accessToken');
       if (!token) {
@@ -123,82 +195,39 @@ const ChatPage = () => {
       }
 
       try {
-        socket.current = await socketService.connect(token);
-        if (!socket.current) throw new Error('Socket connection failed');
+        // ✅ Reuse existing socket if connected
+        let connected = socketService.getSocket();
+        if (!connected || !connected.connected) {
+          connected = await socketService.connect(token);
+        }
+        if (!active || !connected) throw new Error('Socket connection failed');
 
-        socket.current.emit('join-chat-room', interviewId);
+        socket = connected;
+        socketRef.current = socket;
+
+        // Remove any previous listeners to avoid duplicates
+        socket.off('receive-message', handleReceiveMessage);
+        socket.off('messages-read', handleMessagesRead);
+
+        socket.emit('join-chat-room', interviewId);
         setRoomJoined(true);
-        console.log(`📌 Joined room: ${interviewId}`);
+        socket.emit('mark-as-read', { roomId: interviewId });
 
-        socket.current.emit('mark-as-read', { roomId: interviewId });
-
-        // ✅ Listen for new messages
-        socket.current.on('receive-message', (newMsg) => {
-          console.log('📩 Received:', newMsg, 'senderId raw:', newMsg.senderId);
-
-          // Defensive fix: if the server sends senderId as a bare string
-          // (not populated with name/email), normalize it to an object so
-          // the rest of the UI (avatar initial, name label) doesn't break.
-          if (newMsg.senderId && typeof newMsg.senderId === 'string') {
-            const isFromMe = newMsg.senderId === user._id;
-            newMsg = {
-              ...newMsg,
-              senderId: isFromMe
-                ? { _id: user._id, name: user.name, email: user.email }
-                : { _id: newMsg.senderId, name: newMsg.senderName || 'Unknown' },
-            };
-          }
-
-          setMessages(prev => {
-            // 1. If this exact message already exists (by real _id), ignore
-            if (prev.some(m => m._id === newMsg._id)) return prev;
-
-            // 2. Find an optimistic message from the same sender with the same content
-            const optimisticIndex = prev.findIndex(m =>
-              m.optimistic === true &&
-              getId(m.senderId) === getId(newMsg.senderId) &&
-              m.message === newMsg.message
-            );
-
-            // 3. If found, replace it
-            if (optimisticIndex !== -1) {
-              const updated = [...prev];
-              updated[optimisticIndex] = newMsg;
-              console.log('🔄 Replaced optimistic message with real one');
-              return updated;
-            }
-
-            // 4. Otherwise, append as new message
-            return [...prev, newMsg];
-          });
-
-          if (document.hasFocus()) {
-            socket.current.emit('mark-as-read', { roomId: interviewId });
-          }
-        });
-
-        socket.current.on('messages-read', ({ userId: readerId }) => {
-          console.log('👀 Read by:', readerId);
-          setMessages(prev =>
-            prev.map(msg =>
-              getId(msg.senderId) !== getId(readerId) && !msg.isRead
-                ? { ...msg, isRead: true, readAt: new Date() }
-                : msg
-            )
-          );
-        });
+        socket.on('receive-message', handleReceiveMessage);
+        socket.on('messages-read', handleMessagesRead);
       } catch (err) {
-        toast.error('Chat connection failed');
-        console.error(err);
+        toast.error('Chat connection failed. Please refresh.');
+        console.error('Chat init error:', err);
       }
     };
 
     initChat();
 
     return () => {
-      if (socket.current) {
-        socket.current.off('receive-message');
-        socket.current.off('messages-read');
+      active = false;
+      if (socket) {
+        socket.off('receive-message', handleReceiveMessage);
+        socket.off('messages-read', handleMessagesRead);
       }
     };
   }, [interviewId, navigate]);
@@ -207,6 +236,7 @@ const ChatPage = () => {
   useEffect(() => {
     const loadMessages = async () => {
       setLoading(true);
+      seenIds.current = new Set();
       await fetchMessages(1, false);
       setLoading(false);
     };
@@ -226,10 +256,7 @@ const ChatPage = () => {
   }, [roomJoined, interviewId]);
 
   const MessageBubble = ({ msg }) => {
-    // ✅ FIX: string-safe comparison instead of strict === on possibly
-    // mismatched types (ObjectId vs string vs undefined)
     const isMine = getId(msg.senderId) === getId(user?._id);
-
     return (
       <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-3`}>
         {!isMine && (
@@ -273,7 +300,6 @@ const ChatPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-100 flex flex-col">
-      {/* Header */}
       <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="p-1 -ml-1 rounded-full hover:bg-gray-100 transition">
@@ -286,7 +312,6 @@ const ChatPage = () => {
         </div>
       </div>
 
-      {/* Messages */}
       <div
         ref={chatContainerRef}
         onScroll={handleScroll}
@@ -316,7 +341,6 @@ const ChatPage = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
       <div className="bg-white/80 backdrop-blur-md border-t border-gray-100 p-3">
         <form onSubmit={handleSendMessage} className="max-w-5xl mx-auto flex gap-2">
           <input
