@@ -7,12 +7,14 @@ import {
   getInterviewById,
   updateInterview,
   endInterview,
+  deleteInterview,
+  
 } from '../controllers/interviewController.js';
 import Interview from '../models/Interview.js';
 
 const router = express.Router();
 
-// Validation for creating interview
+// Validation rules for creating an interview
 const createValidation = [
   body('candidateId').notEmpty().isMongoId(),
   body('position').notEmpty(),
@@ -21,25 +23,22 @@ const createValidation = [
   body('duration').optional().isInt({ min: 15, max: 180 }),
 ];
 
-// All routes require authentication
+// All routes in this file require authentication
 router.use(protect);
 
-// GET /api/interviews
-router.get('/', getInterviews);
+// ========== STATS (must come before /:id) ==========
 
-// POST /api/interviews (HR only)
+// ========== LIST & CREATE ==========
+router.get('/', getInterviews);
 router.post('/', authorize('HR'), createValidation, createInterview);
 
-// GET /api/interviews/:id
+// ========== SINGLE INTERVIEW (by ID) ==========
 router.get('/:id', getInterviewById);
-
-// PUT /api/interviews/:id (cancel/reschedule)
 router.put('/:id', updateInterview);
-
-// POST /api/interviews/:id/end (end interview)
+router.delete('/:id', deleteInterview);
 router.post('/:id/end', endInterview);
 
-// ========== HTTP ACCEPT ENDPOINT (used by floating card & manual accept) ==========
+// ========== WAITING ROOM / ACCEPT (HTTP fallbacks for socket) ==========
 router.post('/:id/accept', protect, async (req, res, next) => {
   try {
     const interview = await Interview.findById(req.params.id);
@@ -49,7 +48,6 @@ router.post('/:id/accept', protect, async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Only HR can accept interviews' });
     }
 
-    // ✅ Set meetingStartedAt when accepting via HTTP
     interview.waitingRoomStatus = 'Accepted';
     interview.status = 'InProgress';
     interview.meetingStartedAt = new Date();
@@ -67,7 +65,6 @@ router.post('/:id/accept', protect, async (req, res, next) => {
   }
 });
 
-// ========== HTTP JOIN ENDPOINT (candidate joins waiting room) ==========
 router.post('/:id/join', protect, async (req, res, next) => {
   try {
     const interview = await Interview.findById(req.params.id);

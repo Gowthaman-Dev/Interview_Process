@@ -60,16 +60,20 @@ export const createInterview = async (req, res, next) => {
 };
 
 // ========== GET INTERVIEWS (with pagination & role filtering) ==========
+// ========== GET INTERVIEWS (with pagination, search, filter) ==========
 export const getInterviews = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 5;
     const skip = (page - 1) * limit;
+    const search = req.query.search || '';
+    const status = req.query.status || '';
 
     let filter = {};
     const userId = req.user.id;
     const userRole = req.user.role;
 
+    // Role-based filter
     if (userRole === 'HR') {
       filter.hrId = userId;
     } else if (userRole === 'Candidate') {
@@ -78,6 +82,21 @@ export const getInterviews = async (req, res, next) => {
       // Admin sees all
     } else {
       return next(new AppError('Unauthorized', 403));
+    }
+
+    // Search by position or candidate name (populated)
+    if (search) {
+      const candidates = await User.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+      const candidateIds = candidates.map(c => c._id);
+      filter.$or = [
+        { position: { $regex: search, $options: 'i' } },
+        { candidateId: { $in: candidateIds } },
+      ];
+    }
+
+    // Filter by status
+    if (status && status !== 'All') {
+      filter.status = status;
     }
 
     const interviews = await Interview.find(filter)
@@ -213,3 +232,31 @@ export const endInterview = async (req, res, next) => {
     res.status(200).json({ success: true, message: 'Interview ended', duration: interview.duration });
   } catch (error) { next(error); }
 };
+
+// @desc    Delete an interview (permanent)
+// @route   DELETE /api/interviews/:id
+export const deleteInterview = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const interview = await Interview.findById(id);
+    if (!interview) return next(new AppError('Interview not found', 404));
+
+    // Authorization: only the HR who created it or Admin
+    if (userRole !== 'Admin' && interview.hrId.toString() !== userId) {
+      return next(new AppError('Not authorized to delete this interview', 403));
+    }
+
+    await Interview.findByIdAndDelete(id);
+
+    // Optional: delete associated messages, feedback, notes? We'll keep them.
+    // For a clean design, you could cascade delete.
+
+    res.status(200).json({ success: true, message: 'Interview deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
