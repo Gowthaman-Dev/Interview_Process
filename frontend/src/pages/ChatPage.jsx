@@ -258,30 +258,30 @@ const ChatPage = () => {
   const MessageBubble = ({ msg }) => {
     const isMine = getId(msg.senderId) === getId(user?._id);
     return (
-      <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-3`}>
+      <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-4 animate-fade-in`}>
         {!isMine && (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center text-white text-xs font-bold mr-2 self-end">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white text-sm font-bold mr-3 shadow-md shrink-0">
             {msg.senderId?.name?.charAt(0).toUpperCase() || 'U'}
           </div>
         )}
         <div
-          className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
+          className={`max-w-[75%] px-5 py-3 shadow-sm relative group transition-all duration-300 hover:shadow-md ${
             isMine
-              ? 'bg-[#06B6D4] text-white rounded-br-md'
-              : 'bg-white text-gray-800 rounded-bl-md border border-gray-100'
+              ? 'bg-gradient-to-br from-indigo-600 to-cyan-600 text-white rounded-2xl rounded-tr-sm'
+              : 'bg-white/90 backdrop-blur-sm text-slate-800 rounded-2xl rounded-tl-sm border border-white/40'
           }`}
         >
           {!isMine && (
-            <p className="text-xs font-semibold mb-1 text-gray-500">{msg.senderId?.name || 'Unknown'}</p>
+            <p className="text-xs font-bold mb-1 text-indigo-500 tracking-wide">{msg.senderId?.name || 'Unknown'}</p>
           )}
-          <p className="text-sm break-words leading-relaxed">{msg.message}</p>
-          <div className={`flex items-center justify-end gap-1 mt-1 ${isMine ? 'text-white/70' : 'text-gray-400'}`}>
-            <span className="text-[10px]">
+          <p className="text-[15px] break-words leading-relaxed font-medium">{msg.message}</p>
+          <div className={`flex items-center justify-end gap-1.5 mt-2 ${isMine ? 'text-white/80' : 'text-slate-400'}`}>
+            <span className="text-[11px] font-medium tracking-wide">
               {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             {isMine && (
               <span className="text-xs">
-                {msg.isRead ? <CheckCheck size={12} className="text-white/80" /> : <Check size={12} />}
+                {msg.isRead ? <CheckCheck size={14} className="text-cyan-200" /> : <Check size={14} />}
               </span>
             )}
           </div>
@@ -292,71 +292,96 @@ const ChatPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-3 border-[#06B6D4] border-t-transparent"></div>
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center relative overflow-hidden">
+        {/* Decorative background blurs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-400/20 blur-[100px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-cyan-400/20 blur-[100px]" />
+        
+        <div className="bg-white/60 backdrop-blur-xl p-6 rounded-3xl shadow-xl border border-white/50 flex flex-col items-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+          <p className="text-slate-600 font-semibold tracking-wide">Loading chat...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-100 flex flex-col">
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-1 -ml-1 rounded-full hover:bg-gray-100 transition">
-            <ArrowLeft size={22} className="text-gray-700" />
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col relative overflow-hidden font-sans">
+      {/* Decorative background blurs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-300/15 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-300/15 blur-[120px] pointer-events-none" />
+
+      {/* Header */}
+      <div className="bg-white/70 backdrop-blur-2xl border-b border-white/50 sticky top-0 z-20 shadow-[0_4px_30px_rgba(0,0,0,0.02)]">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-xl hover:bg-slate-100/80 transition-all active:scale-95 bg-white/50 shadow-sm border border-slate-100">
+            <ArrowLeft size={20} className="text-slate-700" />
           </button>
           <div className="flex-1">
-            <h1 className="font-semibold text-gray-800">Interview Chat</h1>
-            <p className="text-xs text-gray-500">ID: {interviewId?.slice(-8)}</p>
+            <h1 className="font-bold text-slate-800 text-lg tracking-tight">Interview Chat</h1>
+            <p className="text-xs font-semibold text-indigo-500 tracking-wider uppercase">Session ID: {interviewId?.slice(-8)}</p>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-slate-100 to-slate-200 border border-white shadow-sm flex items-center justify-center">
+             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.6)]" />
           </div>
         </div>
       </div>
 
+      {/* Chat Container */}
       <div
         ref={chatContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4"
+        className="flex-1 overflow-y-auto px-4 py-6 z-10 relative custom-scrollbar scroll-smooth"
       >
         {loadingMore && (
-          <div className="text-center py-2">
-            <span className="text-xs text-gray-400 bg-white/50 backdrop-blur-sm px-3 py-1 rounded-full">
-              Loading older messages...
+          <div className="text-center py-3 sticky top-0 z-10">
+            <span className="text-xs font-semibold text-slate-500 bg-white/80 backdrop-blur-md px-4 py-1.5 rounded-full shadow-sm border border-white/50">
+              Loading previous messages...
             </span>
           </div>
         )}
+        
         {messages.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="bg-white/50 backdrop-blur-sm rounded-full p-4 mb-3">
-              <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+            <div className="bg-white/60 backdrop-blur-xl shadow-lg border border-white/50 rounded-full p-6 mb-4 transform hover:scale-105 transition-transform duration-300">
+              <svg className="w-12 h-12 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
-            <p className="text-gray-500 text-sm">No messages yet</p>
-            <p className="text-gray-400 text-xs mt-1">Start the conversation</p>
+            <p className="text-slate-800 font-bold text-lg mb-1">It's quiet here...</p>
+            <p className="text-slate-500 text-sm font-medium">Send a message to start the conversation</p>
           </div>
         )}
-        {messages.map((msg, idx) => (
-          <MessageBubble key={msg._id || idx} msg={msg} />
-        ))}
-        <div ref={messagesEndRef} />
+        
+        <div className="max-w-5xl mx-auto w-full">
+          {messages.map((msg, idx) => (
+            <MessageBubble key={msg._id || idx} msg={msg} />
+          ))}
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md border-t border-gray-100 p-3">
-        <form onSubmit={handleSendMessage} className="max-w-5xl mx-auto flex gap-2">
+      {/* Input Area */}
+      <div className="bg-white/60 backdrop-blur-2xl border-t border-white/50 p-4 pb-6 z-20 shadow-[0_-4px_30px_rgba(0,0,0,0.02)] relative">
+        <form onSubmit={handleSendMessage} className="max-w-5xl mx-auto flex gap-3 relative">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
-            className="flex-1 border border-gray-200 rounded-full px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent bg-white/90"
+            className="flex-1 bg-white/80 border border-slate-200/60 rounded-2xl px-6 py-4 text-[15px] font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] transition-all duration-300"
             disabled={sending}
           />
           <button
             type="submit"
             disabled={sending || !newMessage.trim()}
-            className="bg-[#06B6D4] text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-[#0891B2] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            className="bg-gradient-to-r from-indigo-600 to-cyan-500 text-white rounded-2xl px-6 flex items-center justify-center hover:shadow-lg hover:shadow-indigo-500/25 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none active:scale-95 group"
           >
-            {sending ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> : <Send size={18} />}
+            {sending ? (
+               <div className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />
+            ) : (
+               <Send size={20} className="transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300" />
+            )}
           </button>
         </form>
       </div>

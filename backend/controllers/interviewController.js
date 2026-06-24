@@ -59,7 +59,6 @@ export const createInterview = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ========== GET INTERVIEWS (with pagination & role filtering) ==========
 // ========== GET INTERVIEWS (with pagination, search, filter) ==========
 export const getInterviews = async (req, res, next) => {
   try {
@@ -73,18 +72,10 @@ export const getInterviews = async (req, res, next) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    // Role-based filter
-    if (userRole === 'HR') {
-      filter.hrId = userId;
-    } else if (userRole === 'Candidate') {
-      filter.candidateId = userId;
-    } else if (userRole === 'Admin') {
-      // Admin sees all
-    } else {
-      return next(new AppError('Unauthorized', 403));
-    }
+    if (userRole === 'HR') filter.hrId = userId;
+    else if (userRole === 'Candidate') filter.candidateId = userId;
+    else if (userRole !== 'Admin') return next(new AppError('Unauthorized', 403));
 
-    // Search by position or candidate name (populated)
     if (search) {
       const candidates = await User.find({ name: { $regex: search, $options: 'i' } }).select('_id');
       const candidateIds = candidates.map(c => c._id);
@@ -94,13 +85,10 @@ export const getInterviews = async (req, res, next) => {
       ];
     }
 
-    // Filter by status
-    if (status && status !== 'All') {
-      filter.status = status;
-    }
+    if (status && status !== 'All') filter.status = status;
 
     const interviews = await Interview.find(filter)
-      .populate('candidateId', 'name email')
+      .populate('candidateId', 'name email resumeUrl')
       .populate('hrId', 'name email')
       .sort({ date: -1, time: -1 })
       .skip(skip)
@@ -116,12 +104,13 @@ export const getInterviews = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ========== GET SINGLE INTERVIEW ==========
+// ========== GET SINGLE INTERVIEW (with resumeUrl) ==========
 export const getInterviewById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // ✅ resumeUrl added to populate
     const interview = await Interview.findById(id)
-      .populate('candidateId', 'name email skills')
+      .populate('candidateId', 'name email skills resumeUrl')
       .populate('hrId', 'name email');
 
     if (!interview) return next(new AppError('Interview not found', 404));
@@ -147,7 +136,6 @@ export const updateInterview = async (req, res, next) => {
     const interview = await Interview.findById(id);
     if (!interview) return next(new AppError('Interview not found', 404));
 
-    // Allow any HR or Admin to modify (relaxed for testing)
     if (userRole !== 'Admin' && userRole !== 'HR') {
       return next(new AppError('Only HR users can modify interviews', 403));
     }
@@ -188,7 +176,7 @@ export const updateInterview = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ========== END INTERVIEW (capture duration & notify both parties via socket) ==========
+// ========== END INTERVIEW (capture duration & notify both parties) ==========
 export const endInterview = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -222,7 +210,6 @@ export const endInterview = async (req, res, next) => {
     await Notification.create({ userId: interview.candidateId, type: 'interview_update', title: 'Interview Ended', message: msg, relatedInterviewId: interview._id });
     await Notification.create({ userId: interview.hrId, type: 'interview_update', title: 'Interview Ended', message: msg, relatedInterviewId: interview._id });
 
-    // ✅ Emit socket event to both participants
     const io = req.app.get('io');
     if (io) {
       io.to(interview.candidateId.toString()).emit('call-ended', { interviewId: interview._id });
@@ -233,8 +220,7 @@ export const endInterview = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// @desc    Delete an interview (permanent)
-// @route   DELETE /api/interviews/:id
+// ========== DELETE INTERVIEW (permanent) ==========
 export const deleteInterview = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -244,19 +230,36 @@ export const deleteInterview = async (req, res, next) => {
     const interview = await Interview.findById(id);
     if (!interview) return next(new AppError('Interview not found', 404));
 
-    // Authorization: only the HR who created it or Admin
     if (userRole !== 'Admin' && interview.hrId.toString() !== userId) {
       return next(new AppError('Not authorized to delete this interview', 403));
     }
 
     await Interview.findByIdAndDelete(id);
-
-    // Optional: delete associated messages, feedback, notes? We'll keep them.
-    // For a clean design, you could cascade delete.
-
     res.status(200).json({ success: true, message: 'Interview deleted successfully' });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
+// ========== GET INTERVIEW STATS (optional) ==========
+export const getInterviewStats = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let filter = {};
+    if (userRole === 'HR') filter.hrId = userId;
+    else if (userRole === 'Candidate') filter.candidateId = userId;
+
+    const stats = await Interview.aggregate([
+      { $match: filter },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    const result = { total: 0, Scheduled: 0, InProgress: 0, Completed: 0, Cancelled: 0 };
+    stats.forEach(item => {
+      result[item._id] = item.count;
+      result.total += item.count;
+    });
+
+    res.status(200).json({ success: true, stats: result });
+  } catch (error) { next(error); }
+};

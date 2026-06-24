@@ -6,7 +6,7 @@ import NavBar from '../components/NavBar';
 import toast from 'react-hot-toast';
 import {
   Calendar, Clock, User, Mail, Briefcase, FileText, MessageSquare, Star,
-  CheckCircle, XCircle, Video, AlertCircle, Edit, Trash2, Send
+  CheckCircle, XCircle, Video, AlertCircle, Edit, Trash2, Send, Loader2, ChevronRight
 } from 'lucide-react';
 
 const InterviewDetailsPage = () => {
@@ -63,30 +63,35 @@ const InterviewDetailsPage = () => {
 
   const getStatusBadge = (status) => {
     const config = {
-      Scheduled: { icon: Calendar, bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-      InProgress: { icon: Video, bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-      Completed: { icon: CheckCircle, bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-      Cancelled: { icon: XCircle, bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+      Scheduled: { icon: Calendar, bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200/50' },
+      InProgress: { icon: Video, bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200/50' },
+      Completed: { icon: CheckCircle, bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200/50' },
+      Cancelled: { icon: XCircle, bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200/50' },
     };
     const { icon: Icon, bg, text, border } = config[status] || config.Scheduled;
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${text} border ${border}`}>
-        <Icon size={12} />
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-bold border shadow-sm ${bg} ${text} ${border}`}>
+        <Icon size={14} />
         {status}
       </span>
     );
   };
 
+  // ✅ Helper: fix Cloudinary URL and force download
+  const getResumeDownloadUrl = (url) => {
+    if (!url) return '';
+    let fixed = url.replace('/image/upload/', '/raw/upload/');
+    const separator = fixed.includes('?') ? '&' : '?';
+    fixed += separator + 'fl_attachment=1&filename=resume.pdf';
+    return fixed;
+  };
+
   if (loading) {
     return (
-      <div>
+      <div className="min-h-screen bg-slate-50 flex flex-col">
         <NavBar />
-        <div className="max-w-4xl mx-auto p-6 animate-pulse">
-          <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-6 space-y-6">
-            <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-            <div className="h-32 bg-gray-100 rounded-xl"></div>
-          </div>
+        <div className="max-w-5xl mx-auto p-6 flex-1 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 text-[#06B6D4] animate-spin" />
         </div>
       </div>
     );
@@ -94,16 +99,15 @@ const InterviewDetailsPage = () => {
 
   if (error || !interview) {
     return (
-      <div>
+      <div className="min-h-screen bg-slate-50 flex flex-col">
         <NavBar />
-        <div className="max-w-4xl mx-auto p-6 text-center">
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-            <p className="text-red-600 font-medium">{error || 'Interview not found'}</p>
-            <Link to="/dashboard" className="mt-4 inline-block px-5 py-2 bg-[#0F172A] text-white rounded-xl hover:bg-[#1E293B] transition">
-              Back to Dashboard
-            </Link>
-          </div>
+        <div className="max-w-xl w-full mx-auto p-8 mt-20 text-center glass-panel rounded-3xl animate-fade-in">
+          <AlertCircle className="w-16 h-16 text-rose-500 mx-auto mb-4" />
+          <p className="text-xl font-bold text-slate-900 mb-2">{error || 'Interview not found'}</p>
+          <p className="text-slate-500 font-medium mb-6">The interview you are looking for does not exist or you don't have access.</p>
+          <Link to="/dashboard" className="inline-block px-6 py-2.5 bg-[#0F172A] text-white font-semibold rounded-xl hover:bg-slate-800 transition shadow-sm">
+            Back to Dashboard
+          </Link>
         </div>
       </div>
     );
@@ -113,144 +117,205 @@ const InterviewDetailsPage = () => {
   const isCandidate = user?.role === 'Candidate';
 
   return (
-    <div>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <NavBar />
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+      <div className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8 animate-fade-in">
+        
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-2">
+            <span className="hover:text-[#0F172A] cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>Interviews</span>
+            <ChevronRight size={14} />
+            <span className="text-[#06B6D4]">Details</span>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
           {/* Header */}
-          <div className="border-b border-gray-100 px-6 py-5 bg-gradient-to-r from-gray-50 to-white">
-            <h1 className="text-2xl md:text-3xl font-bold text-[#0F172A] tracking-tight">
-              {interview.position}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3 mt-3">
+          <div className="border-b border-slate-100 px-6 sm:px-8 py-6 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-[#0F172A] tracking-tight mb-2">
+                {interview.position}
+              </h1>
+              <div className="flex flex-wrap items-center gap-4 text-slate-500 text-sm font-medium">
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={16} className="text-slate-400" />
+                  {new Date(interview.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Clock size={16} className="text-slate-400" />
+                  {interview.time}
+                </div>
+              </div>
+            </div>
+            <div>
               {getStatusBadge(interview.status)}
-              <div className="flex items-center gap-1 text-gray-500 text-sm">
-                <Calendar size={14} />
-                {new Date(interview.date).toDateString()}
-              </div>
-              <div className="flex items-center gap-1 text-gray-500 text-sm">
-                <Clock size={14} />
-                {interview.time}
-              </div>
             </div>
           </div>
 
-          <div className="px-6 py-6 space-y-8">
+          <div className="px-6 sm:px-8 py-8 space-y-8 bg-slate-50/50">
             {/* Candidate & HR Info - 2 column grid */}
             <div className="grid md:grid-cols-2 gap-6">
+              
               {/* Candidate Card */}
-              <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-[#0F172A]/10 rounded-full flex items-center justify-center">
-                    <User className="w-4 h-4 text-[#0F172A]" />
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                    <User size={18} />
                   </div>
-                  <h2 className="font-semibold text-[#0F172A]">Candidate</h2>
+                  <div>
+                    <h2 className="font-bold text-[#0F172A]">Candidate Profile</h2>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Interviewee</p>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium text-gray-600">Name:</span> {interview.candidateId?.name || 'N/A'}</p>
-                  <p className="text-sm flex items-center gap-1"><Mail size={12} className="text-gray-400"/> {interview.candidateId?.email || 'N/A'}</p>
+                <div className="space-y-3">
+                  <p className="text-sm flex items-center gap-2"><span className="w-16 font-semibold text-slate-600">Name:</span> <span className="font-medium text-[#0F172A]">{interview.candidateId?.name || 'N/A'}</span></p>
+                  <p className="text-sm flex items-center gap-2"><span className="w-16 font-semibold text-slate-600">Email:</span> <span className="font-medium text-[#0F172A] truncate">{interview.candidateId?.email || 'N/A'}</span></p>
+                  
                   {interview.candidateId?.skills?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {interview.candidateId.skills.map(skill => (
-                        <span key={skill} className="bg-white border border-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full">
-                          {skill}
-                        </span>
-                      ))}
+                    <div className="pt-2">
+                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Top Skills</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {interview.candidateId.skills.map(skill => (
+                          <span key={skill} className="bg-slate-100 border border-slate-200 text-slate-700 font-medium text-xs px-2.5 py-1 rounded-md">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ✅ Resume download link */}
+                  {interview.candidateId?.resumeUrl && (
+                    <div className="mt-4 pt-3 border-t border-slate-100">
+                      <a
+                        href={getResumeDownloadUrl(interview.candidateId.resumeUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center w-full gap-2 py-2 bg-indigo-50 text-indigo-700 font-bold text-sm rounded-lg hover:bg-indigo-100 transition-colors"
+                      >
+                        <FileText size={16} /> Download Resume
+                      </a>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* HR Card */}
-              <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-100">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-[#06B6D4]/10 rounded-full flex items-center justify-center">
-                    <Briefcase className="w-4 h-4 text-[#06B6D4]" />
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-[#06B6D4]/10 rounded-xl flex items-center justify-center text-[#06B6D4]">
+                    <Briefcase size={18} />
                   </div>
-                  <h2 className="font-semibold text-[#0F172A]">HR Contact</h2>
+                  <div>
+                    <h2 className="font-bold text-[#0F172A]">HR Contact</h2>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Interviewer</p>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium text-gray-600">Name:</span> {interview.hrId?.name || 'N/A'}</p>
-                  <p className="text-sm flex items-center gap-1"><Mail size={12} className="text-gray-400"/> {interview.hrId?.email || 'N/A'}</p>
+                <div className="space-y-3">
+                  <p className="text-sm flex items-center gap-2"><span className="w-16 font-semibold text-slate-600">Name:</span> <span className="font-medium text-[#0F172A]">{interview.hrId?.name || 'N/A'}</span></p>
+                  <p className="text-sm flex items-center gap-2"><span className="w-16 font-semibold text-slate-600">Email:</span> <span className="font-medium text-[#0F172A] truncate">{interview.hrId?.email || 'N/A'}</span></p>
                 </div>
               </div>
             </div>
 
             {/* Meeting Link (if scheduled) */}
             {interview.status === 'Scheduled' && interview.meetLink && (
-              <div className="bg-cyan-50/50 rounded-xl p-4 border border-cyan-100">
-                <h2 className="text-sm font-semibold text-cyan-700 mb-2 flex items-center gap-1"><Video size={14} /> Meeting Link</h2>
-                <a href={interview.meetLink} target="_blank" rel="noopener noreferrer" className="text-[#06B6D4] hover:underline break-all text-sm">
-                  {interview.meetLink}
+              <div className="bg-cyan-50 rounded-2xl p-5 border border-cyan-200/50 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-cyan-100 text-cyan-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Video size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-cyan-800">Meeting Link generated</h2>
+                    <a href={interview.meetLink} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-700 hover:underline text-sm font-medium break-all block mt-0.5">
+                      {interview.meetLink}
+                    </a>
+                  </div>
+                </div>
+                <a href={interview.meetLink} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-cyan-600 text-white font-semibold text-sm rounded-xl hover:bg-cyan-700 shadow-sm transition-colors whitespace-nowrap">
+                  Open Link
                 </a>
               </div>
             )}
 
             {/* Duration (completed) */}
             {interview.status === 'Completed' && interview.duration && (
-              <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
-                <Clock className="w-5 h-5 text-gray-500" />
+              <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+                <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-slate-500" />
+                </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Duration</p>
-                  <p className="text-lg font-semibold text-[#0F172A]">{interview.duration} minutes</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Duration</p>
+                  <p className="text-xl font-bold text-[#0F172A]">{interview.duration} Minutes</p>
                 </div>
               </div>
             )}
 
             {/* Feedback Section (Candidate only) */}
             {isCandidate && interview.status === 'Completed' && (
-              <div className="bg-yellow-50/40 rounded-xl p-4 border border-yellow-100">
-                <h2 className="font-semibold text-[#0F172A] mb-2 flex items-center gap-1"><Star size={16} className="text-yellow-500"/> Feedback</h2>
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <h2 className="font-bold text-[#0F172A] mb-4 flex items-center gap-2 text-lg">
+                  <Star size={20} className="text-amber-500" /> Interview Feedback
+                </h2>
                 {feedback ? (
-                  <div>
-                    <div className="flex gap-1 mb-2">
+                  <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
+                    <div className="flex gap-1 mb-3">
                       {[1,2,3,4,5].map(star => (
-                        <Star key={star} size={18} className={star <= feedback.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'} />
+                        <Star key={star} size={20} className={star <= feedback.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'} />
                       ))}
                     </div>
-                    <p className="text-gray-700 text-sm">{feedback.comment}</p>
+                    <p className="text-slate-700 font-medium text-sm leading-relaxed">{feedback.comment}</p>
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm">No feedback yet.</p>
+                  <div className="text-center py-6 bg-slate-50 border border-slate-100 border-dashed rounded-xl">
+                    <p className="text-slate-500 font-medium">Your interviewer hasn't provided feedback yet.</p>
+                  </div>
                 )}
-              </div>
-            )}
-
-            {/* Submit Feedback Button (HR only) */}
-            {isHR && interview.status === 'Completed' && !feedback && (
-              <div className="flex justify-end">
-                <Link to={`/feedback/${interview._id}`} className="inline-flex items-center gap-1.5 bg-[#0F172A] text-white px-4 py-2 rounded-xl hover:bg-[#1E293B] transition shadow-sm">
-                  <Edit size={14} /> Submit Feedback
-                </Link>
               </div>
             )}
 
             {/* Notes Section (HR only) */}
             {isHR && (
-              <div className="border-t border-gray-100 pt-6">
-                <h2 className="font-semibold text-[#0F172A] mb-3 flex items-center gap-1"><FileText size={16} /> Internal Notes</h2>
-                <form onSubmit={handleAddNote} className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    value={newNote}
-                    onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="Add a note..."
-                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition"
-                  />
-                  <button type="submit" disabled={submittingNote} className="bg-[#06B6D4] text-white px-4 py-2 rounded-xl hover:bg-[#0891B2] transition disabled:opacity-50 flex items-center gap-1">
-                    <Send size={14} /> Add
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-[#0F172A] flex items-center gap-2 text-lg">
+                    <FileText size={20} className="text-[#06B6D4]" /> Internal Notes
+                  </h2>
+                  <span className="text-xs font-semibold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">HR Only</span>
+                </div>
+                
+                <form onSubmit={handleAddNote} className="flex flex-col sm:flex-row gap-3 mb-6">
+                  <div className="flex-1 relative group">
+                    <input
+                      type="text"
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="Add an observation or note..."
+                      className="w-full pl-4 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4] focus:bg-white transition-all shadow-sm font-medium text-sm text-[#0F172A]"
+                    />
+                  </div>
+                  <button type="submit" disabled={submittingNote || !newNote.trim()} className="bg-[#0F172A] text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-sm whitespace-nowrap">
+                    {submittingNote ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 
+                    Add Note
                   </button>
                 </form>
+
                 {notes.length === 0 ? (
-                  <p className="text-gray-400 text-sm">No notes yet.</p>
+                  <div className="text-center py-8 bg-slate-50 border border-slate-100 border-dashed rounded-xl">
+                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-slate-500 font-medium text-sm">No internal notes added yet.</p>
+                  </div>
                 ) : (
-                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                     {notes.map(note => (
-                      <div key={note._id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                        <p className="text-sm text-gray-700">{note.note}</p>
-                        <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                          <Clock size={10} /> {new Date(note.createdAt).toLocaleString()} by {note.hrId?.name || 'HR'}
-                        </p>
+                      <div key={note._id} className="bg-slate-50 rounded-xl p-4 border border-slate-100 shadow-sm">
+                        <p className="text-sm font-medium text-[#0F172A] leading-relaxed">{note.note}</p>
+                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200/50">
+                          <Clock size={12} className="text-slate-400" />
+                          <p className="text-xs font-semibold text-slate-500">
+                            {new Date(note.createdAt).toLocaleString()} <span className="mx-1">•</span> <span className="text-[#06B6D4]">{note.hrId?.name || 'HR'}</span>
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -258,16 +323,13 @@ const InterviewDetailsPage = () => {
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="border-t border-gray-100 pt-6 flex flex-wrap gap-3">
+            {/* Action Buttons Container */}
+            <div className="pt-2 flex flex-wrap items-center justify-end gap-3">
               {interview.status === 'Scheduled' && (
                 <>
-                  <Link to={`/waiting-room/${id}`} className="px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition shadow-sm flex items-center gap-1">
-                    <Video size={16} /> Join Interview
-                  </Link>
                   {isHR && (
                     <button onClick={async () => {
-                      if (window.confirm('Cancel this interview?')) {
+                      if (window.confirm('Are you sure you want to cancel this interview?')) {
                         try {
                           await api.put(`/interviews/${id}`, { action: 'cancel' });
                           toast.success('Interview cancelled');
@@ -276,28 +338,43 @@ const InterviewDetailsPage = () => {
                           toast.error('Cancel failed');
                         }
                       }
-                    }} className="px-5 py-2.5 border border-red-300 text-red-600 rounded-xl hover:bg-red-50 transition flex items-center gap-1">
-                      <Trash2 size={16} /> Cancel
+                    }} className="px-5 py-2.5 bg-white border border-rose-200 text-rose-600 font-bold rounded-xl hover:bg-rose-50 transition-colors flex items-center gap-2 shadow-sm">
+                      <Trash2 size={16} /> Cancel Interview
                     </button>
                   )}
+                  <Link to={`/waiting-room/${id}`} className="px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-sm hover-lift">
+                    <Video size={18} /> Join Session
+                  </Link>
                 </>
               )}
+
               {interview.status === 'InProgress' && (
-                <Link to={`/video/${id}`} className="px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition flex items-center gap-1">
-                  <Video size={16} /> Join Ongoing Call
+                <Link to={`/video/${id}`} className="px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-sm hover-lift animate-pulse">
+                  <Video size={18} /> Join Ongoing Call
                 </Link>
               )}
+
               {interview.status === 'Completed' && (
-                <Link to={`/chat/${id}`} className="px-5 py-2.5 bg-[#0F172A] text-white rounded-xl hover:bg-[#1E293B] transition flex items-center gap-1">
-                  <MessageSquare size={16} /> Chat
-                </Link>
+                <>
+                  {isHR && !feedback && (
+                    <Link to={`/feedback/${interview._id}`} className="px-5 py-2.5 bg-white border border-slate-200 text-[#0F172A] font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center gap-2 shadow-sm">
+                      <Edit size={16} /> Submit Feedback
+                    </Link>
+                  )}
+                  <Link to={`/chat/${id}`} className="px-6 py-2.5 bg-[#0F172A] text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center gap-2 shadow-sm hover-lift">
+                    <MessageSquare size={18} /> View Chat
+                  </Link>
+                </>
               )}
             </div>
 
-            <div className="text-xs text-gray-400 border-t border-gray-100 pt-4 text-right">
-              Created {new Date(interview.createdAt).toLocaleString()}
-            </div>
           </div>
+        </div>
+        
+        <div className="mt-4 text-center">
+          <p className="text-xs font-semibold text-slate-400">
+            Interview ID: {interview._id} • Created {new Date(interview.createdAt).toLocaleDateString()}
+          </p>
         </div>
       </div>
     </div>

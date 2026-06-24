@@ -18,10 +18,17 @@ export const updateProfile = async (req, res, next) => {
       user.skills = Array.isArray(skills) ? skills : skills.split(',').map(s => s.trim());
     }
 
-    await user.save(); // This is fine for infrequent updates, but if you see version conflicts, replace with updateOne
+    await user.save();
     res.status(200).json({
       success: true,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, skills: user.skills, resumeUrl: user.resumeUrl },
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        skills: user.skills,
+        resumeUrl: user.resumeUrl,
+      },
     });
   } catch (error) {
     next(error);
@@ -55,7 +62,7 @@ export const uploadResume = async (req, res, next) => {
       { $set: { resumeUrl: result.secure_url } }
     );
 
-    // Fetch updated user to return the new resumeUrl (optional)
+    // Fetch updated user to return the new resumeUrl
     const updatedUser = await User.findById(user._id).select('resumeUrl');
 
     res.status(200).json({
@@ -64,7 +71,8 @@ export const uploadResume = async (req, res, next) => {
       message: 'Resume uploaded successfully',
     });
   } catch (error) {
-    next(error);
+    console.error('Upload resume error:', error);
+    next(new AppError(error.message || 'Upload failed', 500));
   }
 };
 
@@ -119,5 +127,35 @@ export const getProfile = async (req, res, next) => {
     res.status(200).json({ success: true, user });
   } catch (error) {
     next(error);
+  }
+};
+
+// @desc    Delete resume (remove from Cloudinary and user)
+// @route   DELETE /api/users/resume
+export const deleteResume = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || user.isDeleted) {
+      return next(new AppError('User not found', 404));
+    }
+
+    if (!user.resumeUrl) {
+      return next(new AppError('No resume to delete', 400));
+    }
+
+    // Delete from Cloudinary
+    await deleteFromCloudinary(user.resumeUrl);
+
+    // Remove resumeUrl from user
+    user.resumeUrl = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Resume deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete resume error:', error);
+    next(new AppError(error.message || 'Delete failed', 500));
   }
 };

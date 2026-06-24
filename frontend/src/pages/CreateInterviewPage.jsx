@@ -5,7 +5,7 @@ import api from '../services/api';
 import SearchPage from './SearchPage';
 import NavBar from '../components/NavBar';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, Briefcase, UserPlus } from 'lucide-react';
+import { Calendar, Clock, Briefcase, UserPlus, Timer, ChevronRight, X, ShieldAlert, Loader2 } from 'lucide-react';
 
 const CreateInterviewPage = () => {
   const { user } = useAuth();
@@ -75,129 +75,176 @@ const CreateInterviewPage = () => {
 
   if (user?.role !== 'HR') {
     return (
-      <div>
+      <div className="min-h-screen bg-slate-50 flex flex-col">
         <NavBar />
-        <div className="max-w-md mx-auto p-6 text-center">
-          <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
-          <p className="mt-2 text-gray-600">Only HR users can create interviews.</p>
+        <div className="max-w-md w-full mx-auto p-8 mt-20 text-center glass-panel rounded-3xl animate-fade-in">
+          <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-[#0F172A] mb-2">Access Restricted</h1>
+          <p className="text-slate-500 font-medium mb-6">You must be logged in as an HR representative to schedule interviews.</p>
+          <button onClick={() => navigate('/dashboard')} className="px-6 py-2.5 bg-[#0F172A] text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors shadow-sm">
+            Return to Dashboard
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <NavBar />
-      <div className="max-w-2xl mx-auto p-6">
-        <div className="bg-white/80 backdrop-blur-sm border border-gray-100 rounded-2xl shadow-sm p-6">
-          <h1 className="text-2xl font-bold text-[#0F172A] mb-6">Schedule New Interview</h1>
+      <div className="flex-1 w-full max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 animate-fade-in">
+        
+        <div className="mb-8">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-2">
+            <span className="hover:text-[#0F172A] cursor-pointer" onClick={() => navigate('/dashboard')}>Interviews</span>
+            <ChevronRight size={14} />
+            <span className="text-[#06B6D4]">Schedule New</span>
+          </div>
+          <h1 className="text-3xl font-bold text-[#0F172A] tracking-tight">Schedule Interview</h1>
+          <p className="text-slate-500 font-medium mt-1">Set up a new interview session with a candidate.</p>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-7">
+            
             {/* Candidate Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Candidate <span className="text-red-500">*</span>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Select Candidate <span className="text-rose-500">*</span>
               </label>
               {selectedCandidate ? (
-                <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200">
-                  <div>
-                    <p className="font-medium text-[#0F172A]">{selectedCandidate.name}</p>
-                    <p className="text-sm text-gray-500">{selectedCandidate.email}</p>
+                <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-lg">
+                      {selectedCandidate.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-bold text-[#0F172A] text-sm">{selectedCandidate.name}</p>
+                      <p className="text-xs font-medium text-slate-500">{selectedCandidate.email}</p>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedCandidate(null)}
-                    className="text-red-600 hover:text-red-800 text-sm"
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                    title="Remove Candidate"
                   >
-                    Change
+                    <X size={18} />
                   </button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => setShowSearchModal(true)}
-                  className="w-full flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-xl py-3 hover:bg-gray-100 transition-colors"
+                  className={`w-full flex flex-col items-center justify-center gap-2 bg-slate-50/50 border-2 border-dashed ${errors.candidate ? 'border-rose-300 bg-rose-50/50 text-rose-600' : 'border-slate-200 text-slate-500'} rounded-2xl py-8 hover:bg-slate-50 hover:border-slate-300 hover:text-[#0F172A] transition-all group`}
                 >
-                  <UserPlus size={18} />
-                  Select Candidate
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${errors.candidate ? 'bg-rose-100' : 'bg-slate-100 group-hover:bg-[#06B6D4]/10 group-hover:text-[#06B6D4]'} transition-colors mb-1`}>
+                    <UserPlus size={24} />
+                  </div>
+                  <span className="font-semibold text-sm">Browse Candidates</span>
+                  <span className="text-xs font-medium opacity-70">Search from the talent pool</span>
                 </button>
               )}
-              {errors.candidate && <p className="text-red-500 text-xs mt-1">{errors.candidate}</p>}
+              {errors.candidate && <p className="text-rose-500 text-xs font-semibold mt-1.5">{errors.candidate}</p>}
             </div>
 
+            <div className="h-px bg-slate-100 w-full"></div>
+
             {/* Position */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
-              <div className="relative">
-                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">Interview Role / Position <span className="text-rose-500">*</span></label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Briefcase className={`h-5 w-5 transition-colors ${errors.position ? 'text-rose-400' : 'text-slate-400 group-focus-within:text-[#06B6D4]'}`} />
+                </div>
                 <input
                   type="text"
                   name="position"
                   value={formData.position}
                   onChange={handleChange}
-                  className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition-all"
-                  placeholder="e.g., Frontend Developer"
+                  className={`block w-full pl-11 pr-4 py-3 bg-slate-50 border rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all shadow-sm ${errors.position ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-400' : 'border-slate-200 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4]'}`}
+                  placeholder="e.g., Senior Frontend Developer"
                 />
               </div>
-              {errors.position && <p className="text-red-500 text-xs mt-1">{errors.position}</p>}
+              {errors.position && <p className="text-rose-500 text-xs font-semibold mt-1.5">{errors.position}</p>}
             </div>
 
             {/* Date & Time */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-slate-700">Date <span className="text-rose-500">*</span></label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Calendar className={`h-5 w-5 transition-colors ${errors.date ? 'text-rose-400' : 'text-slate-400 group-focus-within:text-[#06B6D4]'}`} />
+                  </div>
                   <input
                     type="date"
                     name="date"
                     value={formData.date}
                     onChange={handleChange}
-                    className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent"
+                    className={`block w-full pl-11 pr-4 py-3 bg-slate-50 border rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all shadow-sm ${errors.date ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-400' : 'border-slate-200 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4]'}`}
                     min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
-                {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
+                {errors.date && <p className="text-rose-500 text-xs font-semibold mt-1.5">{errors.date}</p>}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-slate-700">Time <span className="text-rose-500">*</span></label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Clock className={`h-5 w-5 transition-colors ${errors.time ? 'text-rose-400' : 'text-slate-400 group-focus-within:text-[#06B6D4]'}`} />
+                  </div>
                   <input
                     type="time"
                     name="time"
                     value={formData.time}
                     onChange={handleChange}
-                    className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent"
+                    className={`block w-full pl-11 pr-4 py-3 bg-slate-50 border rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all shadow-sm ${errors.time ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-400' : 'border-slate-200 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4]'}`}
                   />
                 </div>
-                {errors.time && <p className="text-red-500 text-xs mt-1">{errors.time}</p>}
+                {errors.time && <p className="text-rose-500 text-xs font-semibold mt-1.5">{errors.time}</p>}
               </div>
             </div>
 
             {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-              <input
-                type="number"
-                name="duration"
-                value={formData.duration}
-                onChange={handleChange}
-                min="15"
-                max="180"
-                step="15"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent"
-              />
-              {errors.duration && <p className="text-red-500 text-xs mt-1">{errors.duration}</p>}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">Duration (Minutes)</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Timer className={`h-5 w-5 transition-colors ${errors.duration ? 'text-rose-400' : 'text-slate-400 group-focus-within:text-[#06B6D4]'}`} />
+                </div>
+                <input
+                  type="number"
+                  name="duration"
+                  value={formData.duration}
+                  onChange={handleChange}
+                  min="15"
+                  max="180"
+                  step="15"
+                  className={`block w-full pl-11 pr-4 py-3 bg-slate-50 border rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all shadow-sm ${errors.duration ? 'border-rose-300 focus:ring-rose-200 focus:border-rose-400' : 'border-slate-200 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4]'}`}
+                />
+              </div>
+              {errors.duration && <p className="text-rose-500 text-xs font-semibold mt-1.5">{errors.duration}</p>}
+              <p className="text-xs font-medium text-slate-500">Standard interview duration is typically 45-60 minutes.</p>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#0F172A] text-white py-2.5 rounded-xl font-medium hover:bg-[#1E293B] hover:shadow-md transition-all disabled:opacity-50"
-            >
-              {loading ? 'Scheduling...' : 'Schedule Interview'}
-            </button>
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center items-center gap-2 py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-[#0F172A] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover-lift"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Scheduling...
+                  </>
+                ) : (
+                  'Confirm & Schedule Interview'
+                )}
+              </button>
+            </div>
           </form>
         </div>
       </div>

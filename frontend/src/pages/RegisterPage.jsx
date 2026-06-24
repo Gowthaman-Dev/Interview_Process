@@ -1,7 +1,43 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Lock, Eye, EyeOff, Briefcase, Video, Users } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, Briefcase, Users, Video, ChevronRight, CheckCircle2 } from 'lucide-react';
+
+const TypingEffect = ({ words }) => {
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [currentText, setCurrentText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const word = words[currentWordIndex];
+    let timeoutId;
+
+    if (isDeleting) {
+      if (currentText === '') {
+        setIsDeleting(false);
+        setCurrentWordIndex((prev) => (prev + 1) % words.length);
+        timeoutId = setTimeout(() => {}, 500);
+      } else {
+        timeoutId = setTimeout(() => setCurrentText(word.substring(0, currentText.length - 1)), 50);
+      }
+    } else {
+      if (currentText === word) {
+        timeoutId = setTimeout(() => setIsDeleting(true), 2000);
+      } else {
+        timeoutId = setTimeout(() => setCurrentText(word.substring(0, currentText.length + 1)), 100);
+      }
+    }
+
+    return () => clearTimeout(timeoutId);
+  }, [currentText, isDeleting, currentWordIndex, words]);
+
+  return (
+    <span className="inline-flex items-center min-h-[40px]">
+      <span className="text-[#06B6D4] font-semibold">{currentText}</span>
+      <span className="ml-1 w-[3px] h-[30px] bg-slate-400 animate-pulse rounded-full"></span>
+    </span>
+  );
+};
 
 const RegisterPage = () => {
   const [name, setName] = useState('');
@@ -14,46 +50,6 @@ const RegisterPage = () => {
   const [errors, setErrors] = useState({});
   const { register, loading } = useAuth();
   const navigate = useNavigate();
-
-  // Typing animation
-  const [typingText, setTypingText] = useState('');
-  const [textIndex, setTextIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const phrases = [
-    "Connect. Interview. Hire.",
-    "Find the Right Talent Faster.",
-    "Schedule Interviews Seamlessly.",
-    "Built for Modern Recruitment."
-  ];
-
-  useEffect(() => {
-    const currentPhrase = phrases[textIndex];
-    if (isDeleting) {
-      if (charIndex > 0) {
-        const timeout = setTimeout(() => {
-          setTypingText(currentPhrase.substring(0, charIndex - 1));
-          setCharIndex(charIndex - 1);
-        }, 40);
-        return () => clearTimeout(timeout);
-      } else {
-        setIsDeleting(false);
-        setTextIndex((prev) => (prev + 1) % phrases.length);
-      }
-    } else {
-      if (charIndex < currentPhrase.length) {
-        const timeout = setTimeout(() => {
-          setTypingText(currentPhrase.substring(0, charIndex + 1));
-          setCharIndex(charIndex + 1);
-        }, 80);
-        return () => clearTimeout(timeout);
-      } else {
-        const timeout = setTimeout(() => setIsDeleting(true), 2000);
-        return () => clearTimeout(timeout);
-      }
-    }
-  }, [charIndex, isDeleting, textIndex]);
 
   const validate = () => {
     const newErrors = {};
@@ -73,193 +69,217 @@ const RegisterPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative overflow-hidden">
-      {/* Floating cyan glow */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#06B6D4]/15 rounded-full filter blur-3xl -z-10"></div>
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#06B6D4]/10 rounded-full filter blur-2xl -z-10"></div>
+    <div className="flex min-h-screen bg-slate-50">
+      
+      {/* Left Panel - Registration Form */}
+      <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 lg:px-24 bg-white relative shadow-2xl z-10">
+        <div className="w-full max-w-md mx-auto animate-fade-in py-12">
+          
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 bg-[#0F172A] rounded-xl flex items-center justify-center shadow-md">
+              <Video className="w-5 h-5 text-[#06B6D4]" />
+            </div>
+            <span className="text-xl font-bold text-[#0F172A] tracking-tight">InterviewMeet</span>
+          </div>
 
-      {/* Card */}
-      <div className="w-full max-w-md mx-4 animate-fadeInUp">
-        <div className="bg-white/90 backdrop-blur-sm border border-white/40 rounded-2xl shadow-2xl p-8 transition-all duration-500">
-          {/* Logo & Header */}
-          <div className="text-center mb-6">
-            <div className="flex justify-center mb-2">
-              <div className="w-10 h-10 bg-[#0F172A] rounded-xl flex items-center justify-center">
-                <Video className="w-5 h-5 text-[#06B6D4]" />
-              </div>
-            </div>
-            <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">
-              Create Your Account
-            </h1>
-            <div className="h-10 mt-2">
-              <p className="text-gray-500 text-sm font-medium">
-                {typingText}
-                <span className="inline-block w-[2px] h-4 bg-[#06B6D4] ml-0.5 animate-pulse"></span>
-              </p>
-            </div>
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-[#0F172A] tracking-tight mb-2">Create an account</h2>
+            <p className="text-slate-500 font-medium h-8">
+              <TypingEffect words={["Join the future of hiring.", "Accelerate your career.", "Conduct better interviews.", "Built for modern recruitment."]} />
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name */}
-            <div className="group">
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-[#06B6D4] transition-colors duration-200" size={18} />
+            {/* Name Input */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-slate-700">Full Name</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-slate-400 group-focus-within:text-[#06B6D4] transition-colors" />
+                </div>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-3 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition-all duration-200 text-[#0F172A] placeholder:text-gray-400"
-                  placeholder="Full name"
+                  className="block w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4] focus:bg-white transition-all shadow-sm"
+                  placeholder="Jane Doe"
                 />
               </div>
-              {errors.name && <p className="text-red-500 text-xs mt-1 ml-1">{errors.name}</p>}
+              {errors.name && <p className="text-red-500 text-xs font-medium ml-1">{errors.name}</p>}
             </div>
 
-            {/* Email */}
-            <div className="group">
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-[#06B6D4] transition-colors duration-200" size={18} />
+            {/* Email Input */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-slate-700">Email Address</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-[#06B6D4] transition-colors" />
+                </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition-all duration-200 text-[#0F172A] placeholder:text-gray-400"
-                  placeholder="Email address"
+                  className="block w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4] focus:bg-white transition-all shadow-sm"
+                  placeholder="jane@company.com"
                 />
               </div>
-              {errors.email && <p className="text-red-500 text-xs mt-1 ml-1">{errors.email}</p>}
+              {errors.email && <p className="text-red-500 text-xs font-medium ml-1">{errors.email}</p>}
             </div>
 
-            {/* Role segmented control */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-[#0F172A]/80">I am joining as</label>
-              <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+            {/* Role Segmented Control */}
+            <div className="space-y-1.5 pb-1">
+              <label className="block text-sm font-semibold text-slate-700">I am joining as a</label>
+              <div className="flex p-1 bg-slate-100 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setRole('Candidate')}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                     role === 'Candidate'
-                      ? 'bg-[#0F172A] text-white shadow-sm'
-                      : 'text-gray-600 hover:text-[#0F172A]'
+                      ? 'bg-white text-[#0F172A] shadow border border-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  <Users size={14} />
+                  <Users size={16} className={role === 'Candidate' ? 'text-[#06B6D4]' : ''} />
                   Candidate
                 </button>
                 <button
                   type="button"
                   onClick={() => setRole('HR')}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                     role === 'HR'
-                      ? 'bg-[#0F172A] text-white shadow-sm'
-                      : 'text-gray-600 hover:text-[#0F172A]'
+                      ? 'bg-white text-[#0F172A] shadow border border-slate-200/50'
+                      : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  <Briefcase size={14} />
-                  HR
+                  <Briefcase size={16} className={role === 'HR' ? 'text-[#06B6D4]' : ''} />
+                  HR Professional
                 </button>
               </div>
             </div>
 
-            {/* Password */}
-            <div className="group">
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-[#06B6D4] transition-colors duration-200" size={18} />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition-all duration-200 text-[#0F172A] placeholder:text-gray-400"
-                  placeholder="Password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#06B6D4] transition-colors"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+            {/* Passwords - Grid for desktop */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-slate-700">Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-[#06B6D4] transition-colors" />
+                  </div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full pl-11 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4] focus:bg-white transition-all shadow-sm"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#06B6D4] transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {errors.password && <p className="text-red-500 text-xs font-medium ml-1">{errors.password}</p>}
               </div>
-              {errors.password && <p className="text-red-500 text-xs mt-1 ml-1">{errors.password}</p>}
+
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-slate-700">Confirm Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-[#06B6D4] transition-colors" />
+                  </div>
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="block w-full pl-11 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#06B6D4]/20 focus:border-[#06B6D4] focus:bg-white transition-all shadow-sm"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#06B6D4] transition-colors focus:outline-none"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {errors.confirmPassword && <p className="text-red-500 text-xs font-medium ml-1">{errors.confirmPassword}</p>}
+              </div>
             </div>
 
-            {/* Confirm Password */}
-            <div className="group">
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-[#06B6D4] transition-colors duration-200" size={18} />
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent transition-all duration-200 text-[#0F172A] placeholder:text-gray-400"
-                  placeholder="Confirm password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#06B6D4] transition-colors"
-                >
-                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {errors.confirmPassword && <p className="text-red-500 text-xs mt-1 ml-1">{errors.confirmPassword}</p>}
-            </div>
-
-            {/* CTA Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#0F172A] text-white py-3 rounded-xl font-semibold transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#06B6D4]/25 active:scale-95 disabled:opacity-50 disabled:transform-none"
+              className="w-full mt-4 flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-[#0F172A] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover-lift"
             >
               {loading ? (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   Creating account...
-                </div>
+                </>
               ) : (
-                'Get Started'
+                <>
+                  Get Started <ChevronRight className="w-4 h-4" />
+                </>
               )}
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-500 text-sm">
-              Already have an account?{' '}
-              <Link
-                to="/login"
-                className="text-[#0F172A] font-medium hover:text-[#06B6D4] transition-colors duration-200 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-[#06B6D4] after:transition-all hover:after:w-full"
-              >
-                Sign in
-              </Link>
-            </p>
-          </div>
+          <p className="mt-8 text-center text-sm text-slate-500 font-medium">
+            Already have an account?{' '}
+            <Link to="/login" className="font-semibold text-[#0F172A] hover:text-[#06B6D4] transition-colors">
+              Sign in to dashboard
+            </Link>
+          </p>
         </div>
       </div>
 
-      {/* Custom animations */}
-      <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fadeInUp {
-          animation: fadeInUp 0.6s ease-out forwards;
-        }
-        .animate-pulse {
-          animation: blink 1s step-end infinite;
-        }
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `}</style>
+      {/* Right Panel - Value Prop (Hidden on Mobile) */}
+      <div className="hidden lg:flex flex-col justify-center w-[45%] xl:w-1/2 bg-slate-50 p-12 relative overflow-hidden">
+        <div className="max-w-md mx-auto relative z-10 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+          <div className="bg-white p-8 rounded-3xl shadow-[0_20px_50px_rgba(15,23,42,0.05)] border border-slate-100">
+            <h3 className="text-xl font-bold text-[#0F172A] mb-6 tracking-tight">Why enterprise teams choose us</h3>
+            
+            <div className="space-y-6">
+              {[
+                { title: "Collaborative Coding", desc: "Real-time editor with syntax highlighting and instant execution." },
+                { title: "Crystal Clear Video", desc: "Low-latency WebRTC infrastructure for uninterrupted communication." },
+                { title: "Structured Feedback", desc: "Standardized evaluation forms for unbiased hiring decisions." }
+              ].map((item, i) => (
+                <div key={i} className="flex gap-4 items-start">
+                  <div className="mt-1 bg-slate-100 p-2 rounded-lg">
+                    <CheckCircle2 className="w-5 h-5 text-[#06B6D4]" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900">{item.title}</h4>
+                    <p className="text-sm text-slate-500 mt-1 leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-3">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className={`w-10 h-10 rounded-full border-2 border-white bg-slate-${200 + i*100} flex items-center justify-center text-xs font-medium text-slate-700`}>
+                      {String.fromCharCode(64 + i)}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-sm font-medium text-slate-600">
+                  Join <strong className="text-slate-900">10,000+</strong> recruiters
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative elements */}
+        <div className="absolute top-[20%] right-[-10%] w-64 h-64 bg-[#06B6D4]/10 rounded-full blur-[80px]"></div>
+        <div className="absolute bottom-[20%] left-[-10%] w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px]"></div>
+      </div>
     </div>
   );
 };

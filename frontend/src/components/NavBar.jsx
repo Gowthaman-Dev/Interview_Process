@@ -1,12 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useEffect, useState } from 'react';
 import socketService from '../services/socket';
-import { Menu, X, Bell, LogOut, User, Calendar } from 'lucide-react';
+import { Menu, X, Bell, LogOut, User, Calendar, Video } from 'lucide-react';
 
 const NavBar = () => {
   const { user, logout, notificationCount, setNotificationCount } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -51,53 +52,74 @@ const NavBar = () => {
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
+  const isActive = (path) => location.pathname === path;
+
   return (
-    <nav className="sticky top-0 z-50 w-full bg-white/70 backdrop-blur-md border-b border-gray-100/50 shadow-sm">
+    <nav className="sticky top-0 z-50 w-full glass-panel border-b border-slate-200/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo with improved typography */}
           <Link
             to="/dashboard"
-            className="flex items-center gap-2 text-xl font-semibold tracking-tight text-[#0F172A] hover:text-[#06B6D4] transition-colors duration-200 font-sans"
+            className="flex items-center gap-2.5 text-xl font-bold tracking-tight text-[#0F172A] hover:opacity-80 transition-opacity duration-200 font-sans"
           >
-            <div className="w-7 h-7 bg-[#0F172A] rounded-lg flex items-center justify-center shadow-sm">
-              <svg className="w-4 h-4 text-[#06B6D4]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
+            <div className="w-8 h-8 bg-[#0F172A] rounded-xl flex items-center justify-center shadow-sm">
+              <Video className="w-4 h-4 text-[#06B6D4]" />
             </div>
             <span className="hidden sm:inline">InterviewMeet</span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-5">
+          <div className="hidden md:flex items-center space-x-2">
+            <Link
+              to="/dashboard"
+              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                isActive('/dashboard') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+              }`}
+            >
+              Dashboard
+            </Link>
+            
             <Link
               to="/profile"
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-[#06B6D4] transition-all duration-200"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                isActive('/profile') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+              }`}
             >
               <User size={16} />
               <span>Profile</span>
             </Link>
+
             {user?.role === 'HR' && (
               <Link
                 to="/create-interview"
-                className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-[#06B6D4] transition-all duration-200"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  isActive('/create-interview') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+                }`}
               >
                 <Calendar size={16} />
                 <span>Create Interview</span>
               </Link>
             )}
+
+            <div className="h-5 w-px bg-slate-200 mx-2"></div>
+
             {/* Notification Bell */}
-            <Link to="/notifications" className="relative">
-              <Bell size={18} className="text-gray-700 hover:text-[#06B6D4] transition-colors duration-200" />
+            <Link 
+              to="/notifications" 
+              className="relative p-2 rounded-lg text-slate-600 hover:text-[#0F172A] hover:bg-slate-50 transition-all duration-200"
+            >
+              <Bell size={18} />
               {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs font-medium rounded-full h-4 w-4 flex items-center justify-center shadow-sm">
+                <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full h-3.5 w-3.5 flex items-center justify-center shadow-sm border-2 border-white ring-1 ring-white">
                   {notificationCount > 9 ? '9+' : notificationCount}
                 </span>
               )}
             </Link>
+
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 bg-[#0F172A] text-white text-sm font-medium px-3.5 py-1.5 rounded-lg hover:bg-[#1E293B] transition-all duration-200 hover:shadow-md"
+              className="ml-2 flex items-center gap-1.5 bg-[#0F172A] text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition-all duration-200 hover-lift shadow-sm"
             >
               <LogOut size={14} />
               Logout
@@ -107,70 +129,69 @@ const NavBar = () => {
           {/* Mobile menu button */}
           <button
             onClick={toggleMenu}
-            className="md:hidden p-1 rounded-md text-gray-700 hover:text-[#06B6D4] focus:outline-none focus:ring-2 focus:ring-[#06B6D4] transition-all"
+            className="md:hidden p-2 rounded-xl text-slate-600 hover:text-[#0F172A] hover:bg-slate-100 focus:outline-none transition-all"
           >
-            {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
         {/* Mobile Navigation Dropdown */}
         {isMenuOpen && (
-          <div className="md:hidden py-3 space-y-2 border-t border-gray-100 animate-slideDown">
+          <div className="md:hidden py-4 space-y-1.5 border-t border-slate-100 animate-slide-up">
+            <Link
+              to="/dashboard"
+              onClick={() => setIsMenuOpen(false)}
+              className={`block px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+                isActive('/dashboard') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+              }`}
+            >
+              Dashboard
+            </Link>
             <Link
               to="/profile"
               onClick={() => setIsMenuOpen(false)}
-              className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-[#06B6D4] hover:bg-gray-50 rounded-lg transition-all"
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+                isActive('/profile') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+              }`}
             >
-              <User size={16} /> Profile
+              <User size={18} /> Profile
             </Link>
             {user?.role === 'HR' && (
               <Link
                 to="/create-interview"
                 onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-[#06B6D4] hover:bg-gray-50 rounded-lg transition-all"
+                className={`flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+                  isActive('/create-interview') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+                }`}
               >
-                <Calendar size={16} /> Create Interview
+                <Calendar size={18} /> Create Interview
               </Link>
             )}
             <Link
               to="/notifications"
               onClick={() => setIsMenuOpen(false)}
-              className="flex items-center justify-between px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-[#06B6D4] hover:bg-gray-50 rounded-lg transition-all"
+              className={`flex items-center justify-between px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+                isActive('/notifications') ? 'bg-slate-100 text-[#0F172A]' : 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-50'
+              }`}
             >
               <div className="flex items-center gap-3">
-                <Bell size={16} /> Notifications
+                <Bell size={18} /> Notifications
               </div>
               {notificationCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-medium rounded-full px-2 py-0.5 min-w-[20px] text-center shadow-sm">
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center shadow-sm">
                   {notificationCount}
                 </span>
               )}
             </Link>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-all"
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-all mt-2"
             >
-              <LogOut size={16} /> Logout
+              <LogOut size={18} /> Logout
             </button>
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slideDown {
-          animation: slideDown 0.2s ease-out;
-        }
-      `}</style>
     </nav>
   );
 };

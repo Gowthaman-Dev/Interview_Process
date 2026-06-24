@@ -4,15 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import socketService from '../services/socket';
 import toast from 'react-hot-toast';
-
-const MicIcon       = () => <span>🎤</span>;
-const MicOffIcon    = () => <span>🔇</span>;
-const CameraIcon    = () => <span>📷</span>;
-const CameraOffIcon = () => <span>📷❌</span>;
-const PhoneIcon     = () => <span>📞</span>;
-const FullscreenIcon = () => <span>⛶</span>;
-const MinimizeIcon  = () => <span>🗗</span>;
-const RefreshIcon   = () => <span>🔄</span>;
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Maximize, Minimize, RefreshCw } from 'lucide-react';
 
 /* ─── pick remote person's name from ANY backend shape ─────────────────────── */
 const getRemoteName = (interview, isHR) => {
@@ -463,13 +455,20 @@ const VideoCallPage = () => {
 
   /* Call UI (phase === 'ready' | 'connected') */
   return (
-    <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col">
+    <div ref={containerRef} className="min-h-screen bg-slate-900 relative flex flex-col overflow-hidden font-sans">
+
+      {/* Ambient background glows */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 mix-blend-screen filter blur-[120px]" />
+        <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-cyan-500/10 mix-blend-screen filter blur-[120px]" />
+      </div>
 
       {/* ── Video grid ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col md:flex-row p-4 md:p-6 gap-4 md:gap-6 items-center justify-center">
+      <div className="flex-1 flex flex-col md:flex-row p-4 md:p-8 gap-4 md:gap-8 items-center justify-center z-10 w-full max-w-7xl mx-auto mb-20">
 
         {/* Local video */}
-        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-slate-800 shadow-xl">
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-3xl overflow-hidden bg-slate-900 border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)] group">
+          <div className="absolute inset-0 rounded-3xl border border-white/5 pointer-events-none z-20" />
           <video
             ref={localVideoRef}
             autoPlay
@@ -492,7 +491,8 @@ const VideoCallPage = () => {
         </div>
 
         {/* Remote video */}
-        <div className="relative w-full md:w-1/2 max-w-lg rounded-2xl overflow-hidden bg-slate-800 shadow-xl">
+        <div className="relative w-full md:w-1/2 max-w-lg rounded-3xl overflow-hidden bg-slate-900 border border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)] group">
+          <div className="absolute inset-0 rounded-3xl border border-white/5 pointer-events-none z-20" />
           <video
             ref={remoteVideoRef}
             autoPlay
@@ -514,9 +514,9 @@ const VideoCallPage = () => {
                     {/* ✅ Reconnect button — no page refresh needed */}
                     <button
                       onClick={reconnect}
-                      className="mt-2 flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded-xl transition"
+                      className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-medium rounded-full backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-lg"
                     >
-                      <RefreshIcon /> Reconnect
+                      <RefreshCw size={16} /> Reconnect
                     </button>
                   </>
               }
@@ -532,58 +532,58 @@ const VideoCallPage = () => {
         </div>
       </div>
 
-      {/* ── Controls bar ─────────────────────────────────────────────────────── */}
-      <div className="bg-white/10 backdrop-blur-md border-t border-white/20 p-4 flex justify-center gap-3 md:gap-5">
+      {/* ── Floating Controls Bar ─────────────────────────────────────────────────────── */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-3xl border border-white/20 px-6 py-4 rounded-full flex justify-center items-center gap-4 md:gap-6 shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-50 animate-slide-up">
 
         {/* Mic */}
         <button
           onClick={toggleMic}
           title={micOn ? 'Mute' : 'Unmute'}
-          className={`p-3 md:p-4 rounded-full transition-all duration-200 shadow-lg text-white
-            ${micOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'}`}
+          className={`p-4 rounded-full transition-all duration-300 shadow-lg flex items-center justify-center hover:scale-110 active:scale-95
+            ${micOn ? 'bg-white/20 hover:bg-white/30 text-white border border-white/10' : 'bg-rose-500 hover:bg-rose-600 text-white border border-rose-400'}`}
         >
-          {micOn ? <MicIcon /> : <MicOffIcon />}
+          {micOn ? <Mic size={22} /> : <MicOff size={22} />}
         </button>
 
         {/* Camera */}
         <button
           onClick={toggleCamera}
           title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
-          className={`p-3 md:p-4 rounded-full transition-all duration-200 shadow-lg text-white
-            ${cameraOn ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-600 hover:bg-red-700'}`}
+          className={`p-4 rounded-full transition-all duration-300 shadow-lg flex items-center justify-center hover:scale-110 active:scale-95
+            ${cameraOn ? 'bg-white/20 hover:bg-white/30 text-white border border-white/10' : 'bg-rose-500 hover:bg-rose-600 text-white border border-rose-400'}`}
         >
-          {cameraOn ? <CameraIcon /> : <CameraOffIcon />}
+          {cameraOn ? <VideoIcon size={22} /> : <VideoOff size={22} />}
         </button>
 
-        {/* Reconnect — always visible, useful when one side drops */}
+        {/* End call (Larger) */}
+        <button
+          onClick={handleEndCall}
+          title="End call"
+          className="px-8 py-4 rounded-full bg-rose-600 hover:bg-rose-700 text-white
+            transition-all duration-300 shadow-[0_0_20px_rgba(225,29,72,0.4)] flex items-center justify-center gap-2 font-bold hover:scale-105 active:scale-95"
+        >
+          <PhoneOff size={24} /> <span className="hidden md:inline tracking-wide">End Call</span>
+        </button>
+
+        {/* Reconnect */}
         <button
           onClick={reconnect}
           title="Reconnect"
           disabled={reconnecting}
-          className="p-3 md:p-4 rounded-full bg-slate-700 hover:bg-slate-600 text-white
-            transition-all duration-200 shadow-lg disabled:opacity-50"
+          className="p-4 rounded-full bg-white/20 hover:bg-white/30 text-white border border-white/10
+            transition-all duration-300 shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
         >
-          <span className={reconnecting ? 'animate-spin inline-block' : ''}><RefreshIcon /></span>
-        </button>
-
-        {/* End call */}
-        <button
-          onClick={handleEndCall}
-          title="End call"
-          className="p-3 md:p-4 rounded-full bg-red-600 text-white hover:bg-red-700
-            transition-all duration-200 shadow-lg"
-        >
-          <PhoneIcon />
+          <RefreshCw size={22} className={reconnecting ? 'animate-spin' : ''} />
         </button>
 
         {/* Fullscreen */}
         <button
           onClick={toggleFullscreen}
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          className="p-3 md:p-4 rounded-full bg-slate-700 text-white hover:bg-slate-600
-            transition-all duration-200 shadow-lg"
+          className="p-4 rounded-full bg-white/20 hover:bg-white/30 text-white border border-white/10
+            transition-all duration-300 shadow-lg flex items-center justify-center hover:scale-110 active:scale-95"
         >
-          {isFullscreen ? <MinimizeIcon /> : <FullscreenIcon />}
+          {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
         </button>
       </div>
     </div>
